@@ -10,7 +10,6 @@ from telebot.async_telebot import AsyncTeleBot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from google import genai
 from google.genai import types
-import easyocr
 
 # Load environment variables
 load_dotenv()
@@ -19,6 +18,7 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+USE_EASYOCR = os.getenv("USE_EASYOCR", "False").lower() == "true"
 
 if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
     print("CRITICAL ERROR: TELEGRAM_BOT_TOKEN or GEMINI_API_KEY is missing!")
@@ -30,10 +30,20 @@ bot = AsyncTeleBot(TELEGRAM_BOT_TOKEN)
 # Initialize Gemini Client
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Initialize EasyOCR reader for English and Russian
-print("Initializing EasyOCR reader (en, ru)...")
-reader = easyocr.Reader(['en', 'ru'])
-print("EasyOCR reader successfully initialized!")
+# Initialize EasyOCR reader for English and Russian if enabled
+reader = None
+if USE_EASYOCR:
+    try:
+        import easyocr
+        print("Initializing EasyOCR reader (en, ru)...")
+        reader = easyocr.Reader(['en', 'ru'])
+        print("EasyOCR reader successfully initialized!")
+    except Exception as e:
+        print(f"Failed to initialize EasyOCR: {e}. Falling back to Gemini Multimodal.")
+        USE_EASYOCR = False
+else:
+    print("EasyOCR is disabled (USE_EASYOCR=False). Using Gemini Multimodal directly for OCR.")
+
 
 # In-memory settings and history stores
 user_settings = {}
@@ -312,24 +322,34 @@ async def handle_photo(message):
         # 2. Optimize image (resizing large files to save RAM/Time)
         optimized_bytes = optimize_image(file_bytes)
         
-        # 3. Extract text using EasyOCR (running synchronous block in executor to prevent freezing async loop)
-        loop = asyncio.get_event_loop()
-        ocr_text = await loop.run_in_executor(None, lambda: "\n".join(reader.readtext(optimized_bytes, detail=0)))
-        
-        if not ocr_text.strip():
-            await bot.edit_message_text("⚠️ Rasmdan hech qanday matn aniqlanmadi. Iltimos, sifatliroq rasm yuboring.", chat_id, status_msg.message_id)
-            return
+        # 3. Extract text
+        if USE_EASYOCR and reader is not None:
+            loop = asyncio.get_event_loop()
+            ocr_text = await loop.run_in_executor(None, lambda: "\n".join(reader.readtext(optimized_bytes, detail=0)))
+            if not ocr_text.strip():
+                ocr_text = "[EasyOCR orqali hech qanday matn aniqlanmadi]"
+        else:
+            ocr_text = "[EasyOCR faolsizlantirilgan. Gemini multimodal tahlili ishlatilmoqda]"
         
         # 4. Prepare prompt with Uzbek o' and g' character recovery and analysis instruction
-        prompt = (
-            f"Ushbu rasmda nimalar tasvirlanganini (ob'ektlar, chizmalar, umumiy ko'rinish) aniqlang va uni tahlil qiling.\n"
-            f"Quyidagi matn rasmdan EasyOCR orqali aniqlangan matn hisoblanadi. Undan ham foydalanib, rasmdagi barcha yozuvlarni aniqlang.\n"
-            f"O'zbek tilidagi imlo va OCR xatolarini tuzating, ayniqsa o' va g' harflari uchun noto'g'ri o'qilgan belgilarni to'g'rilab tiklang.\n"
-            f"Rasm va undagi matn nima haqida ekanini to'liq tahlil qilib, o'zbek tilida batafsil tushuntirib bering.\n"
-            f"Agar rasmda yoki matnda biror bir masala, savol yoki topshiriq bo'lsa, unga ham to'liq va aniq javob bering.\n\n"
-            f"OCR MATN:\n"
-            f"{ocr_text}"
-        )
+        if USE_EASYOCR and reader is not None:
+            prompt = (
+                f"Ushbu rasmda nimalar tasvirlanganini (ob'ektlar, chizmalar, umumiy ko'rinish) aniqlang va uni tahlil qiling.\n"
+                f"Quyidagi matn rasmdan EasyOCR orqali aniqlangan matn hisoblanadi. Undan ham foydalanib, rasmdagi barcha yozuvlarni aniqlang.\n"
+                f"O'zbek tilidagi imlo va OCR xatolarini tuzating, ayniqsa o' va g' harflari uchun noto'g'ri o'qilgan belgilarni to'g'rilab tiklang.\n"
+                f"Rasm va undagi matn nima haqida ekanini to'liq tahlil qilib, o'zbek tilida batafsil tushuntirib bering.\n"
+                f"Agar rasmda yoki matnda biror bir masala, savol yoki topshiriq bo'lsa, unga ham to'liq va aniq javob bering.\n\n"
+                f"OCR MATN:\n"
+                f"{ocr_text}"
+            )
+        else:
+            prompt = (
+                f"Ushbu rasmda nimalar tasvirlanganini (ob'ektlar, chizmalar, umumiy ko'rinish) va undagi barcha yozuvlarni aniqlang.\n"
+                f"O'zbek tilidagi imlo xatolarini tuzating, ayniqsa o' va g' harflari noto'g'ri yozilgan bo'lsa, ularni to'g'rilab tiklang.\n"
+                f"Rasm va undagi matn nima haqida ekanini to'liq tahlil qilib, o'zbek tilida batafsil tushuntirib bering.\n"
+                f"Agar rasmda biror bir masala, savol yoki topshiriq bo'lsa, unga ham to'liq va aniq javob bering.\n"
+            )
+        
         
         # 5. Send to Gemini
         # Prepare Config
@@ -474,6 +494,6 @@ async def handle_text(message):
 
 # Main launch
 if __name__ == '__main__':
-    print("🤖 Telegram bot is starting in Python...")
+    print("Telegram bot is starting in Python...")
     import asyncio
     asyncio.run(bot.polling(non_stop=True))
