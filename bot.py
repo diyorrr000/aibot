@@ -447,29 +447,46 @@ async def handle_text(message):
 
         tools = [types.Tool(google_search=types.GoogleSearch())] if settings['grounding'] else None
         
-        config = types.GenerateContentConfig(
-            thinking_config=thinking_config,
-            tools=tools,
-            system_instruction=(
-                "You are a helpful and polite assistant. You must write and respond exclusively in the Uzbek language. "
-                "In your responses, NEVER use bold markdown formatting (do not use **). Keep the text beautiful, "
-                "elegant, and readable by separating key ideas using newlines, bullet points, or lists. "
-                "When you write or show code, always wrap it inside standard code blocks (using triple backticks) "
-                "to format it properly. All explanations, comments, and replies must be fully in Uzbek. "
-                "Do not output any thinking process, reasoning, thoughts, or internal chain-of-thought blocks."
-            )
+        system_instruction = (
+            "You are a helpful and polite assistant. You must write and respond exclusively in the Uzbek language. "
+            "In your responses, NEVER use bold markdown formatting (do not use **). Keep the text beautiful, "
+            "elegant, and readable by separating key ideas using newlines, bullet points, or lists. "
+            "When you write or show code, always wrap it inside standard code blocks (using triple backticks) "
+            "to format it properly. All explanations, comments, and replies must be fully in Uzbek. "
+            "Do not output any thinking process, reasoning, thoughts, or internal chain-of-thought blocks."
         )
         
-        # Call API
-        response = await generate_content_with_retry(
-            model=settings['model'],
-            contents=contents,
-            config=config
-        )
+        # First try with thinking_config, then fallback without it if unsupported
+        try:
+            config = types.GenerateContentConfig(
+                thinking_config=thinking_config,
+                tools=tools,
+                system_instruction=system_instruction
+            )
+            response = await generate_content_with_retry(
+                model=settings['model'],
+                contents=contents,
+                config=config
+            )
+        except Exception as thinking_error:
+            error_str = str(thinking_error)
+            if "thinking" in error_str.lower() or "400" in error_str or "invalid" in error_str.lower():
+                print(f"ThinkingConfig failed, retrying without it: {thinking_error}")
+                config = types.GenerateContentConfig(
+                    tools=tools,
+                    system_instruction=system_instruction
+                )
+                response = await generate_content_with_retry(
+                    model=settings['model'],
+                    contents=contents,
+                    config=config
+                )
+            else:
+                raise thinking_error
         
         bot_response = response.text
         if not bot_response:
-            raise Error("Empty response from Gemini API")
+            raise ValueError("Empty response from Gemini API")
             
         # Save to history
         add_to_history(chat_id, "user", user_message)
@@ -483,14 +500,14 @@ async def handle_text(message):
             await bot.send_message(chat_id, bot_response)
             
     except Exception as e:
-        print(f"Error handling text: {e}")
-        # Quota/API error check
         error_msg = str(e)
+        print(f"Error handling text: {error_msg}")
         is_quota = "429" in error_msg or "quota" in error_msg or "RESOURCE_EXHAUSTED" in error_msg
         if is_quota:
-            await bot.send_message(chat_id, "⚠️ Bepul so'rovlar limiti tugadi! Siz foydalanayotgan model uchun bepul API kalitning limiti tugagan bo'lishi mumkin.\n\n👉 /settings buyrug'i orqali boshqa modelni tanlab ko'ring yoki biroz kutib qayta urining.")
+            await bot.send_message(chat_id, "⚠️ API limiti tugadi! /settings orqali boshqa modelni tanlang yoki biroz kutib qayta urining.")
         else:
-            await bot.send_message(chat_id, "⚠️ Kechirasiz, so'rovingizni qayta ishlashda xatolik yuz berdi. Iltimos, birozdan so'ng qayta urinib ko'ring.")
+            short_error = error_msg[:200] if len(error_msg) > 200 else error_msg
+            await bot.send_message(chat_id, f"⚠️ Xatolik yuz berdi. Sabab:\n{short_error}")
 
 # Main launch
 if __name__ == '__main__':
