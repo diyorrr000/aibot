@@ -302,19 +302,15 @@ async def handle_photo(message):
     settings = get_user_settings(chat_id)
     
     # Send initial status
-    status_msg = await bot.send_message(chat_id, "📥 Rasm yuklab olinmoqda...")
+    status_msg = await bot.send_message(chat_id, "🔍 Rasm tahlil qilinmoqda, iltimos kuting...")
     
     try:
         # 1. Download file
         file_info = await bot.get_file(message.photo[-1].file_id)
         file_bytes = await bot.download_file(file_info.file_path)
         
-        await bot.edit_message_text("⚙️ Rasm optimallashtirilmoqda...", chat_id, status_msg.message_id)
-        
         # 2. Optimize image (resizing large files to save RAM/Time)
         optimized_bytes = optimize_image(file_bytes)
-        
-        await bot.edit_message_text("🔍 Rasmdagi matn EasyOCR orqali o'qilmoqda...", chat_id, status_msg.message_id)
         
         # 3. Extract text using EasyOCR (running synchronous block in executor to prevent freezing async loop)
         loop = asyncio.get_event_loop()
@@ -323,16 +319,13 @@ async def handle_photo(message):
         if not ocr_text.strip():
             await bot.edit_message_text("⚠️ Rasmdan hech qanday matn aniqlanmadi. Iltimos, sifatliroq rasm yuboring.", chat_id, status_msg.message_id)
             return
-
-        await bot.edit_message_text("🤖 Matn Gemini API'ga yuborilmoqda...", chat_id, status_msg.message_id)
         
-        # 4. Prepare prompt with Uzbek o' and g' character recovery instruction
+        # 4. Prepare prompt with Uzbek o' and g' character recovery and analysis instruction
         prompt = (
-            f"Quyidagi matn OCR orqali olingan.\n"
-            f"Undagi xatolarni tuzat.\n"
-            f"Ayniqsa, o'zbek tilidagi o' va g' harflari uchun ishlatiladigan belgilarda OCR xatolarini to'g'irlab, ularni to'g'ri tikla (masalan, o`, o,, o., o^, g`, g,, g. kabilarni o' va g' ga aylantir).\n"
-            f"Agar matn o'zbek tilida bo'lsa o'zbekcha harflarni tikla.\n"
-            f"Agar savol yoki topshiriq bo'lsa unga javob ber.\n\n"
+            f"Quyidagi matn rasmdan OCR (matn aniqlash) orqali olingan.\n"
+            f"Matnda nimalar yozilganini va bu matn/rasm aslida nima haqida ekanini (uning ma'nosi, mohiyati va tarkibini) to'liq tahlil qilib o'zbek tilida tushuntirib ber.\n"
+            f"O'zbek tilidagi imlo va OCR xatolarini tuzat, ayniqsa o' va g' harflari uchun noto'g'ri o'qilgan belgilarni to'g'rilab tikla.\n"
+            f"Agar matnda biron bir savol, topshiriq yoki masala bo'lsa, unga ham to'liq va aniq javob ber.\n\n"
             f"OCR MATN:\n"
             f"{ocr_text}"
         )
