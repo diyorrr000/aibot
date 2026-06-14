@@ -25,11 +25,11 @@ Sahifaning pastki qismidagi **Advanced** tugmasini bosing va **Add Environment V
 
 | Kalit (Key) | Qiymat (Value) | Izoh |
 | :--- | :--- | :--- |
-| `TELEGRAM_BOT_TOKEN` | `8062351285:AAHc0dGfwAPMOZ4pswofz3P-ZINIZJiEQ9A` | Sizning Telegram bot tokeningiz |
-| `GEMINI_API_KEY` | `AIzaSyDszGSEBq9yVxXfiTA16on1LGcviw6W5Es` | Gemini API kaliti |
+| `TELEGRAM_BOT_TOKEN` | `YOUR_TELEGRAM_BOT_TOKEN` | BotFather dan olingan Telegram bot tokeni |
+| `GEMINI_API_KEY` | `YOUR_GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) dan olingan Gemini API kaliti |
 | `GEMINI_MODEL` | `gemini-2.5-flash-lite` | Standart ishlatiladigan Gemini modeli |
 | `PORT` | `3000` | Render porti (bot ichidagi HTTP server buni eshitadi) |
-| `USE_EASYOCR` | `False` | Render bepul rejasi (512MB RAM limit) uchun **False** bo'lishi kerak. Bu orqali OOM (Out Of Memory) xatoligi oldi olinadi va rasm/matn multimodal Gemini orqali tahlil qilinadi. Mahalliy kompyuterda ishlatish uchun **True** qilish mumkin. |
+| `USE_EASYOCR` | `False` | Render bepul rejasi (512MB RAM limit) uchun **False** bo'lishi kerak. |
 
 ### 4. Deploy va Launch
 Barcha ma'lumotlarni kiritgach, **Deploy Web Service** tugmasini bosing. Render loyihani avtomatik ravishda build qiladi va ishga tushiradi.
