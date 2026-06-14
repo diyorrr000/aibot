@@ -322,10 +322,11 @@ async def handle_photo(message):
         
         # 4. Prepare prompt with Uzbek o' and g' character recovery and analysis instruction
         prompt = (
-            f"Quyidagi matn rasmdan OCR (matn aniqlash) orqali olingan.\n"
-            f"Matnda nimalar yozilganini va bu matn/rasm aslida nima haqida ekanini (uning ma'nosi, mohiyati va tarkibini) to'liq tahlil qilib o'zbek tilida tushuntirib ber.\n"
-            f"O'zbek tilidagi imlo va OCR xatolarini tuzat, ayniqsa o' va g' harflari uchun noto'g'ri o'qilgan belgilarni to'g'rilab tikla.\n"
-            f"Agar matnda biron bir savol, topshiriq yoki masala bo'lsa, unga ham to'liq va aniq javob ber.\n\n"
+            f"Ushbu rasmda nimalar tasvirlanganini (ob'ektlar, chizmalar, umumiy ko'rinish) aniqlang va uni tahlil qiling.\n"
+            f"Quyidagi matn rasmdan EasyOCR orqali aniqlangan matn hisoblanadi. Undan ham foydalanib, rasmdagi barcha yozuvlarni aniqlang.\n"
+            f"O'zbek tilidagi imlo va OCR xatolarini tuzating, ayniqsa o' va g' harflari uchun noto'g'ri o'qilgan belgilarni to'g'rilab tiklang.\n"
+            f"Rasm va undagi matn nima haqida ekanini to'liq tahlil qilib, o'zbek tilida batafsil tushuntirib bering.\n"
+            f"Agar rasmda yoki matnda biror bir masala, savol yoki topshiriq bo'lsa, unga ham to'liq va aniq javob bering.\n\n"
             f"OCR MATN:\n"
             f"{ocr_text}"
         )
@@ -356,7 +357,13 @@ async def handle_photo(message):
         # Call API
         response = await generate_content_with_retry(
             model=settings['model'],
-            contents=prompt,
+            contents=[
+                types.Part.from_bytes(
+                    data=optimized_bytes,
+                    mime_type="image/jpeg"
+                ),
+                prompt
+            ],
             config=config
         )
         
