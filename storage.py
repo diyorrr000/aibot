@@ -35,7 +35,7 @@ def get_conn_settings(connection_id: str) -> Dict[str, Any]:
         connection_settings[connection_id] = {
             "system_prompt": settings.default_system_prompt,
             "is_enabled": True,
-            "is_approved": False,  # Must be explicitly approved by Admin
+            "is_approved": True,  # Auto-approved — no admin confirmation needed
             "user_id": None,
             "username": "Noma'lum"
         }

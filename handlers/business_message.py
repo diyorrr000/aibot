@@ -21,10 +21,6 @@ async def handle_business_message(message: types.Message, bot: Bot):
     user_id = message.from_user.id if message.from_user else 0
     conn = get_conn_settings(conn_id)
 
-    if not conn.get("is_approved"):
-        logger.info(f"Business connection {conn_id} is not approved by Admin. Skipping.")
-        return
-
     if not conn.get("is_enabled") or not conn.get("can_reply", True):
         return
 
