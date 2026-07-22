@@ -2,7 +2,7 @@ import logging
 from aiogram import Router, Bot, types
 from aiogram.enums import ChatAction
 
-from services.gemini_service import gemini_service
+from services.grok_service import grok_service
 from services.media_service import media_service
 from storage import get_conn_settings, add_message, get_history
 from config import settings
@@ -92,10 +92,10 @@ async def handle_business_message(message: types.Message, bot: Bot):
 
     # Generate response
     try:
-        reply_text = await gemini_service.generate_response(
+        reply_text = await grok_service.generate_response(
             contents=final_contents,
             system_prompt=conn.get("system_prompt", settings.default_system_prompt),
-            model="gemini-2.5-flash-lite"
+            model="grok-3"
         )
     except Exception as e:
         logger.error(f"Gemini API error: {e}", exc_info=True)

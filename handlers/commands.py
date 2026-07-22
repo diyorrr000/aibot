@@ -13,7 +13,7 @@ from storage import (
     get_history
 )
 from config import settings
-from services.gemini_service import gemini_service
+from services.grok_service import grok_service
 from services.media_service import media_service
 
 logger = logging.getLogger(__name__)
@@ -266,12 +266,12 @@ async def handle_private_message(message: types.Message, bot: Bot):
 
     add_message(message.chat.id, "user", log_content)
 
-    # 5. Generate response using Gemini 2.5 Flash Lite
+    # 5. Generate response using Grok 3
     try:
-        reply_text = await gemini_service.generate_response(
+        reply_text = await grok_service.generate_response(
             contents=final_contents,
             system_prompt=settings.default_system_prompt,
-            model="gemini-2.5-flash-lite"
+            model="grok-3"
         )
     except Exception as e:
         logger.error(f"Gemini API error in private chat: {e}", exc_info=True)

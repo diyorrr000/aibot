@@ -10,6 +10,7 @@ from aiogram.client.default import DefaultBotProperties
 from config import settings
 from middlewares.rate_limit import RateLimitMiddleware
 from handlers import commands, business_connection, business_message
+from services.grok_service import grok_service
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +38,14 @@ async def main():
 
     # Start HTTP health check server (required by Render Web Service)
     await start_health_server()
+
+    # Pre-initialize Grok session (email → OTP → token)
+    logger.info("Initializing Grok session...")
+    try:
+        await grok_service.initialize()
+        logger.info("Grok session ready!")
+    except Exception as e:
+        logger.warning(f"Grok pre-init failed (will retry on first message): {e}")
 
     bot = Bot(
         token=settings.bot_token,
