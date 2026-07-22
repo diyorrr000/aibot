@@ -4,10 +4,6 @@ from pydantic import Field
 class Settings(BaseSettings):
     bot_token: str = Field(..., validation_alias="TELEGRAM_BOT_TOKEN")
     gemini_api_key: str = Field(..., validation_alias="GEMINI_API_KEY")
-    database_url: str = Field(
-        default="sqlite+aiosqlite:///./bot.db", 
-        validation_alias="DATABASE_URL"
-    )
     default_model: str = Field(default="gemini-2.5-flash-lite", validation_alias="GEMINI_MODEL")
     default_system_prompt: str = Field(
         default=(
