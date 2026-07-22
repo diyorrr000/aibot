@@ -41,15 +41,15 @@ async def cmd_start(message: types.Message):
         f"Men SecureXXX xizmatkoriman — Telegram Business uchun Gemini 2.5 Flash Lite AI Asistentingiz.\n\n"
         f"Holat: {status}\n\n"
         f"Ulanish uchun:\n"
-        f"1. Telegram Settings → Telegram Business → Chat Bots\n"
+        f"1. Telegram Settings -> Telegram Business -> Chat Bots\n"
         f"2. @dicogpt_bot ni tanlang va ruxsatlarni bering\n\n"
         f"Buyruqlar:\n"
-        f"/settings — joriy sozlamalar\n"
-        f"/setprompt <matn> — tizim yo'riqnomasini o'zgartirish\n"
-        f"/toggle — avto-javobni yoqish/o'chirish\n"
-        f"/reset — suhbat tarixini tozalash"
+        f"/settings - joriy sozlamalar\n"
+        f"/setprompt <matn> - tizim yo'riqnomasini o'zgartirish\n"
+        f"/toggle - avto-javobni yoqish/o'chirish\n"
+        f"/reset - suhbat tarixini tozalash"
     )
-    await message.answer(text)
+    await message.answer(text, parse_mode=None)
 
 
 @router.message(Command("settings"))
@@ -58,7 +58,7 @@ async def cmd_settings(message: types.Message):
     conn_id, conn = find_user_connection(user_id)
 
     if not conn_id:
-        await message.answer("⚠️ Hali Telegram Business hisobiga ulanmagan.")
+        await message.answer("⚠️ Hali Telegram Business hisobiga ulanmagan.", parse_mode=None)
         return
 
     auto_status = "✅ Yoqilgan" if conn.get("is_enabled", True) else "❌ O'chirilgan"
@@ -68,7 +68,8 @@ async def cmd_settings(message: types.Message):
         f"Sozlamalar:\n\n"
         f"Model: gemini-2.5-flash-lite\n"
         f"Avto-javob: {auto_status}\n\n"
-        f"Tizim yo'riqnomasi:\n{prompt}"
+        f"Tizim yo'riqnomasi:\n{prompt}",
+        parse_mode=None
     )
 
 
