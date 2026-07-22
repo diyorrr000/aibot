@@ -1,5 +1,5 @@
 import logging
-from aiogram import Router, Bot, types, F
+from aiogram import Router, Bot, types
 from aiogram.enums import ChatAction
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +9,7 @@ from database.repository import (
     get_chat_history,
     add_chat_message
 )
-from services.openai_service import openai_service
+from services.gemini_service import gemini_service
 from services.media_service import media_service
 from config import settings
 
@@ -23,7 +23,7 @@ async def handle_business_message(
     session: AsyncSession
 ):
     """
-    Handles incoming messages in a Telegram Business account context.
+    Handles incoming messages in a Telegram Business account context using Gemini 2.5 Flash Lite.
     """
     conn_id = message.business_connection_id
     if not conn_id:
@@ -44,7 +44,7 @@ async def handle_business_message(
         connection_id=conn_id,
         user_id=connection.user_id,
         default_prompt=settings.default_system_prompt,
-        default_model=settings.default_model
+        default_model="gemini-2.5-flash-lite"
     )
 
     if not biz_settings.is_auto_reply_enabled:
@@ -70,51 +70,55 @@ async def handle_business_message(
     except Exception as e:
         logger.warning(f"Could not send typing action: {e}")
 
-    # Process media content
-    user_payload = None
+    # Process input content
+    gemini_contents = []
     log_content = ""
 
     if message.photo:
-        user_payload = await media_service.process_photo(bot, message.photo, message.caption or "")
+        gemini_contents = await media_service.process_photo(bot, message.photo, message.caption or "")
         log_content = f"[Rasm] {message.caption or ''}"
     elif message.voice:
-        user_payload = await media_service.process_voice(bot, message.voice)
-        log_content = str(user_payload["content"])
+        gemini_contents = await media_service.process_voice(bot, message.voice)
+        log_content = "[Ovozli xabar]"
     elif message.document:
-        user_payload = await media_service.process_document(bot, message.document, message.caption or "")
-        log_content = str(user_payload["content"])
+        gemini_contents = await media_service.process_document(bot, message.document, message.caption or "")
+        log_content = f"[Hujjat: {message.document.file_name}]"
     elif message.text:
-        user_payload = {"role": "user", "content": message.text}
+        gemini_contents = [message.text]
         log_content = message.text
     else:
-        user_payload = {"role": "user", "content": "Kechirasiz, ushbu turdagi xabarlarni hali qo'llab-quvvatlamayman."}
+        gemini_contents = ["Kechirasiz, ushbu turdagi xabarlarni hali qo'llab-quvvatlamayman."]
         log_content = "[Qo'llab-quvvatlanmaydigan media]"
 
     # Retrieve chat history from DB
     raw_history = await get_chat_history(session, conn_id, chat_id, limit=settings.max_history_length)
     
-    formatted_history = []
-    for h in raw_history:
-        formatted_history.append({
-            "role": h.role,
-            "content": h.content
-        })
-    
-    # Append latest user message payload
-    formatted_history.append(user_payload)
+    # Prepend conversation history context if text
+    history_context = ""
+    if raw_history:
+        history_context = "Oldingi suhbat tarixi:\n"
+        for h in raw_history:
+            role_label = "Mijoz" if h.role == "user" else "Yordamchi"
+            history_context += f"{role_label}: {h.content}\n"
+        history_context += "\nYangi kelgan xabar / media:\n"
+
+    final_contents = []
+    if history_context:
+        final_contents.append(history_context)
+    final_contents.extend(gemini_contents)
 
     # Save user message to DB
     await add_chat_message(session, conn_id, chat_id, "user", log_content)
 
-    # Generate response from OpenAI GPT
+    # Generate response from Gemini API
     try:
-        reply_text = await openai_service.generate_response(
-            history=formatted_history,
+        reply_text = await gemini_service.generate_response(
+            contents=final_contents,
             system_prompt=biz_settings.system_prompt,
-            model=biz_settings.model_name
+            model="gemini-2.5-flash-lite"
         )
     except Exception as e:
-        logger.error(f"Error calling OpenAI API: {e}", exc_info=True)
+        logger.error(f"Error calling Gemini API: {e}", exc_info=True)
         reply_text = "Kechirasiz, so'rovingizni qayta ishlashda vaqtinchalik xatolik yuz berdi. Iltimos, birozdan so'ng qayta urinib ko'ring."
 
     # Save assistant reply to DB
@@ -136,14 +140,8 @@ async def handle_business_message(
 
 @router.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
-    """
-    Handles edited business messages.
-    """
     logger.info(f"Edited business message received: conn_id={message.business_connection_id}, msg_id={message.message_id}")
 
 @router.deleted_business_messages()
 async def handle_deleted_business_messages(event: types.BusinessMessagesDeleted):
-    """
-    Handles deleted business messages.
-    """
     logger.info(f"Deleted business messages event: conn_id={event.business_connection_id}, chat_id={event.chat.id}, msg_ids={event.message_ids}")

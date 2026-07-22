@@ -22,9 +22,9 @@ services:
       - postgres
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       DATABASE_URL: postgresql+asyncpg://tg_user:tg_password@postgres:5432/tg_business_db
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      GEMINI_MODEL: gemini-2.5-flash-lite
       RATE_LIMIT_SECONDS: 1.5
 
 volumes:

@@ -1,22 +1,19 @@
-import base64
 import io
 import logging
-from typing import Dict, Any, List, Union
+from typing import List, Any
 from PIL import Image
 from aiogram import Bot, types
-from services.openai_service import openai_service
+from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
 
 class MediaService:
     @staticmethod
-    def encode_image_base64(image_bytes: bytes, max_size: int = 1280) -> str:
+    def optimize_image(image_bytes: bytes, max_size: int = 1280) -> bytes:
         """
-        Resize image and encode to base64 data URI for GPT Vision API.
+        Resize image to save RAM/bandwidth before sending to Gemini.
         """
         img = Image.open(io.BytesIO(image_bytes))
-        
-        # Handle transparency/modes
         if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
             background = Image.new("RGB", img.size, (255, 255, 255))
             background.paste(img, mask=img.convert("RGBA").split()[3])
@@ -36,8 +33,7 @@ class MediaService:
 
         out_io = io.BytesIO()
         img.save(out_io, format="JPEG", quality=85)
-        base64_str = base64.b64encode(out_io.getvalue()).decode('utf-8')
-        return f"data:image/jpeg;base64,{base64_str}"
+        return out_io.getvalue()
 
     @classmethod
     async def process_photo(
@@ -45,44 +41,53 @@ class MediaService:
         bot: Bot,
         photo_list: List[types.PhotoSize],
         caption: str = ""
-    ) -> Dict[str, Any]:
+    ) -> List[Any]:
         """
-        Download photo, convert to base64, and format user content for OpenAI Vision.
+        Download photo and create Gemini multimodal image part.
         """
         photo = photo_list[-1]
         file_info = await bot.get_file(photo.file_id)
         file_bytes = await bot.download_file(file_info.file_path)
         
-        image_data_url = cls.encode_image_base64(file_bytes.read())
+        optimized = cls.optimize_image(file_bytes.read())
         
-        text_content = caption if caption else "Rasmda nima tasvirlanganini va undagi matn/savollarni tahlil qilib ber."
+        image_part = genai_types.Part.from_bytes(
+            data=optimized,
+            mime_type="image/jpeg"
+        )
         
-        content = [
-            {"type": "text", "text": text_content},
-            {"type": "image_url", "image_url": {"url": image_data_url}}
-        ]
-        return {"role": "user", "content": content}
+        prompt_text = (
+            f"Ushbu rasmda nimalar tasvirlanganini (ob'ektlar, chizmalar, umumiy ko'rinish) va undagi barcha yozuvlarni aniqlang.\n"
+            f"O'zbek tilidagi imlo xatolarini tuzating.\n"
+            f"Rasm va undagi matn nima haqida ekanini to'liq tahlil qilib, o'zbek tilida batafsil tushuntirib bering.\n"
+        )
+        if caption:
+            prompt_text += f"Mijozning rasmga bergan izohi: {caption}\n"
+
+        return [image_part, prompt_text]
 
     @classmethod
     async def process_voice(
         cls,
         bot: Bot,
         voice: types.Voice
-    ) -> Dict[str, Any]:
+    ) -> List[Any]:
         """
-        Download voice note and transcribe with OpenAI Whisper.
+        Download voice note (.ogg) and send natively to Gemini 2.5 Flash Lite multimodal audio engine.
         """
         file_info = await bot.get_file(voice.file_id)
         file_bytes = await bot.download_file(file_info.file_path)
         
-        transcript_text = await openai_service.transcribe_audio(
-            audio_bytes=file_bytes.read(),
-            filename="voice.ogg"
+        audio_part = genai_types.Part.from_bytes(
+            data=file_bytes.read(),
+            mime_type="audio/ogg"
         )
         
-        logger.info(f"Voice transcribed text: {transcript_text}")
-        prompt = f"[Mijoz yuborgan ovozli xabar matni: '{transcript_text}']"
-        return {"role": "user", "content": prompt}
+        prompt_text = (
+            "Ushbu ovozli xabarni diqqat bilan eshiting va unda aytilgan fikrlarga, savollarga "
+            "yoki topshiriqlarga to'liq o'zbek tilida javob berin."
+        )
+        return [audio_part, prompt_text]
 
     @classmethod
     async def process_document(
@@ -90,26 +95,24 @@ class MediaService:
         bot: Bot,
         document: types.Document,
         caption: str = ""
-    ) -> Dict[str, Any]:
+    ) -> List[Any]:
         """
-        Download text document if small enough and parse its contents.
+        Download document file and parse contents for Gemini prompt.
         """
         file_info = await bot.get_file(document.file_id)
         file_bytes = await bot.download_file(file_info.file_path)
         
-        doc_text = ""
-        try:
-            doc_text = file_bytes.read().decode('utf-8', errors='ignore')
-        except Exception as e:
-            logger.warning(f"Could not parse document text: {e}")
-            doc_text = f"[Hujjat fayl nomi: {document.file_name}]"
-
-        combined = f"Mijoz hujjat yubordi: {document.file_name}\n"
+        doc_raw = file_bytes.read()
+        
+        doc_part = genai_types.Part.from_bytes(
+            data=doc_raw,
+            mime_type=document.mime_type or "text/plain"
+        )
+        
+        prompt_text = f"Mijoz hujjat yubordi ({document.file_name}). Undagi ma'lumotlarni tahlil qilib javob bering."
         if caption:
-            combined += f"Izoh: {caption}\n"
-        if doc_text and len(doc_text) < 4000:
-            combined += f"Hujjat mazmuni:\n{doc_text}"
-
-        return {"role": "user", "content": combined}
+            prompt_text += f"\nIzoh: {caption}"
+            
+        return [doc_part, prompt_text]
 
 media_service = MediaService()

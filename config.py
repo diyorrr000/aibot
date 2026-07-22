@@ -1,20 +1,21 @@
-import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 class Settings(BaseSettings):
     bot_token: str = Field(..., validation_alias="TELEGRAM_BOT_TOKEN")
-    openai_api_key: str = Field(..., validation_alias="OPENAI_API_KEY")
+    gemini_api_key: str = Field(..., validation_alias="GEMINI_API_KEY")
     database_url: str = Field(
         default="sqlite+aiosqlite:///./bot.db", 
         validation_alias="DATABASE_URL"
     )
-    default_model: str = Field(default="gpt-4o-mini", validation_alias="OPENAI_MODEL")
+    default_model: str = Field(default="gemini-2.5-flash-lite", validation_alias="GEMINI_MODEL")
     default_system_prompt: str = Field(
         default=(
-            "Siz Telegram Business yordamchisisiz. Mijozlar bilan muloyim, "
-            "do'stona va professional tarzda gaplashing. Javoblaringizni o'zbek tilida, "
-            "tushunarli va chiroyli formatda taqdim eting."
+            "Siz SecureXXX xizmatkorisiz va Telegram Business yordamchisisiz. "
+            "Mijozlar bergan savollarga har doim to'liq o'zbek tilida, qisqa, aniq va londa javob bering. "
+            "O'zingiz haqida so'ralganda yoki muloqot davomida 'SecureXXX xizmatkoriman' deb ayting. "
+            "Javoblaringizda HECH QACHON qalin shrift (bold markdown **) ishlatmang. "
+            "Fikrlar va axborotlarni yangi satrlar va ro'yxat tartibida yozing."
         ),
         validation_alias="DEFAULT_SYSTEM_PROMPT"
     )

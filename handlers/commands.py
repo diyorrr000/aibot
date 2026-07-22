@@ -24,7 +24,7 @@ async def cmd_start(message: types.Message, session: AsyncSession):
 
     welcome_text = (
         f"👋 Assalomu alaykum, *{message.from_user.first_name or 'Foydalanuvchi'}*!\n\n"
-        f"Men Telegram Business hisobingiz uchun **OpenAI GPT AI Asistent** botman. 🤖\n\n"
+        f"Men Telegram Business hisobingiz uchun **Gemini 2.5 Flash Lite AI Asistent** botman. 🚀\n\n"
         f"📊 **Joriy holat:** {status_str}\n\n"
         f"📖 **Ulanish yo'riqnomasi:**\n"
         f"1. Telegram Sozlamalar (**Settings**) -> **Telegram Business** -> **Chat Bots** bo'limiga kiring.\n"
@@ -41,13 +41,13 @@ async def cmd_start(message: types.Message, session: AsyncSession):
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
     help_text = (
-        f"📖 **Telegram Business AI Bot Yo'riqnomasi**\n\n"
+        f"📖 **Telegram Business Gemini Bot Yo'riqnomasi**\n\n"
         f"**Bot qanday ishlaydi?**\n"
-        f"Ushbu bot Telegram Business funksiyasi orqali hisobingizga ulanadi. Mijoz sizga shaxsiy xabar yuborganda, bot OpenAI GPT modelidan foydalanib sizning nomingizdan aqlli javob qaytaradi.\n\n"
+        f"Ushbu bot Telegram Business funksiyasi orqali hisobingizga ulanadi. Mijoz sizga shaxsiy xabar yuborganda, bot Gemini 2.5 Flash Lite modelidan foydalanib sizning nomingizdan aqlli va tezkor javob qaytaradi.\n\n"
         f"✨ **Imkoniyatlari:**\n"
         f"- Matnli xabarlarga javob berish\n"
-        f"- Rasmlarni tahlil qilish (GPT-4o Vision)\n"
-        f"- Ovozli xabarlarni tinglab javob berish (Whisper)\n"
+        f"- Rasmlarni tahlil qilish (Gemini Multimodal Vision)\n"
+        f"- Ovozli xabarlarni eshitib javob berish (Gemini Multimodal Audio)\n"
         f"- Suhbat tarixini eslab qolish\n"
         f"- Maxsus yo'riqnoma (Prompt) bo'yicha ishlash\n\n"
         f"⚙️ **Sozlamalar:**\n"
@@ -70,7 +70,7 @@ async def cmd_settings(message: types.Message, session: AsyncSession):
         connection_id=connection.connection_id,
         user_id=user_id,
         default_prompt=settings.default_system_prompt,
-        default_model=settings.default_model
+        default_model="gemini-2.5-flash-lite"
     )
 
     auto_status = "✅ Yoqilgan" if biz_settings.is_auto_reply_enabled else "❌ O'chirilgan"
@@ -78,7 +78,7 @@ async def cmd_settings(message: types.Message, session: AsyncSession):
     text = (
         f"⚙️ **Telegram Business Bot Sozlamalari**\n\n"
         f"🆔 **Connection ID:** `{connection.connection_id}`\n"
-        f"🤖 **Model:** `{biz_settings.model_name}`\n"
+        f"🤖 **Model:** `gemini-2.5-flash-lite`\n"
         f"⚡ **Avto-javob holati:** {auto_status}\n\n"
         f"📝 **Tizim Yo'riqnomasi (System Prompt):**\n"
         f"_{biz_settings.system_prompt}_\n\n"
@@ -102,7 +102,7 @@ async def cmd_set_prompt(message: types.Message, command: CommandObject, session
         return
 
     await update_settings(session, connection.connection_id, system_prompt=new_prompt)
-    await message.answer("✅ Tizim yo'riqnomasi (System Prompt) muvaffaqiyatli yangilandi!")
+    await message.answer("✅ Tizim yo'riqnomasini (System Prompt) muvaffaqiyatli yangilandi!")
 
 @router.message(Command("toggle"))
 async def cmd_toggle(message: types.Message, session: AsyncSession):
@@ -118,7 +118,7 @@ async def cmd_toggle(message: types.Message, session: AsyncSession):
         connection_id=connection.connection_id,
         user_id=user_id,
         default_prompt=settings.default_system_prompt,
-        default_model=settings.default_model
+        default_model="gemini-2.5-flash-lite"
     )
 
     new_status = not biz_settings.is_auto_reply_enabled
