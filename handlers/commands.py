@@ -106,20 +106,21 @@ async def cmd_approve(message: types.Message, command: CommandObject, bot: Bot):
 
     conn_id = command.args
     if not conn_id or conn_id not in connection_settings:
-        await message.answer("⚠️ Iltimos, ro'yxatdagi to'g'ri Connection ID ni kiriting. Masalan: /approve conn_id_shu_yerda")
+        await message.answer("⚠️ Iltimos, ro'yxatdagi to'g'ri Connection ID ni kiriting. Masalan: /approve conn_id_shu_yerda", parse_mode=None)
         return
 
     set_conn_setting(conn_id, is_approved=True)
     conn = get_conn_settings(conn_id)
     
-    await message.answer(f"✅ Connection {conn_id} muvaffaqiyatli tasdiqlandi!")
+    await message.answer(f"✅ Connection {conn_id} muvaffaqiyatli tasdiqlandi!", parse_mode=None)
     
     # Notify the owner
     if conn.get("user_id"):
         try:
             await bot.send_message(
                 chat_id=conn["user_id"], 
-                text="🎉 Botingiz admin tomonidan tasdiqlandi! Endi Telegram Business avto-javoblari faol ishlaydi."
+                text="🎉 Botingiz admin tomonidan tasdiqlandi! Endi Telegram Business avto-javoblari faol ishlaydi.",
+                parse_mode=None
             )
         except Exception as e:
             logger.warning(f"Could not notify connection owner: {e}")
@@ -132,20 +133,21 @@ async def cmd_disapprove(message: types.Message, command: CommandObject, bot: Bo
 
     conn_id = command.args
     if not conn_id or conn_id not in connection_settings:
-        await message.answer("⚠️ Iltimos, ro'yxatdagi to'g'ri Connection ID ni kiriting.")
+        await message.answer("⚠️ Iltimos, ro'yxatdagi to'g'ri Connection ID ni kiriting.", parse_mode=None)
         return
 
     set_conn_setting(conn_id, is_approved=False)
     conn = get_conn_settings(conn_id)
 
-    await message.answer(f"❌ Connection {conn_id} tasdiqlash holati bekor qilindi.")
+    await message.answer(f"❌ Connection {conn_id} tasdiqlash holati bekor qilindi.", parse_mode=None)
 
     # Notify the owner
     if conn.get("user_id"):
         try:
             await bot.send_message(
                 chat_id=conn["user_id"], 
-                text="⚠️ Sizning Telegram Business ulanishingiz admin tomonidan to'xtatildi."
+                text="⚠️ Sizning Telegram Business ulanishingiz admin tomonidan to'xtatildi.",
+                parse_mode=None
             )
         except Exception as e:
             logger.warning(f"Could not notify connection owner: {e}")
@@ -154,38 +156,38 @@ async def cmd_disapprove(message: types.Message, command: CommandObject, bot: Bo
 @router.message(Command("setprompt"))
 async def cmd_set_prompt(message: types.Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("⚠️ Ushbu buyruq faqat bot admini (7306854093) uchun amal qiladi.")
+        await message.answer("⚠️ Ushbu buyruq faqat bot admini (7306854093) uchun amal qiladi.", parse_mode=None)
         return
 
     args = command.args
     if not args:
-        await message.answer("⚠️ Foydalanish: /setprompt <connection_id> <prompt matni>")
+        await message.answer("⚠️ Foydalanish: /setprompt <connection_id> <prompt matni>", parse_mode=None)
         return
 
     # Split connection_id and prompt
     parts = args.split(maxsplit=1)
     if len(parts) < 2:
-        await message.answer("⚠️ Foydalanish: /setprompt <connection_id> <prompt matni>")
+        await message.answer("⚠️ Foydalanish: /setprompt <connection_id> <prompt matni>", parse_mode=None)
         return
 
     conn_id, new_prompt = parts
     if conn_id not in connection_settings:
-        await message.answer("⚠️ Bunday Connection ID topilmadi.")
+        await message.answer("⚠️ Bunday Connection ID topilmadi.", parse_mode=None)
         return
 
     set_conn_setting(conn_id, system_prompt=new_prompt)
-    await message.answer(f"✅ Connection {conn_id} uchun tizim yo'riqnomasi yangilandi!")
+    await message.answer(f"✅ Connection {conn_id} uchun tizim yo'riqnomasi yangilandi!", parse_mode=None)
 
 
 @router.message(Command("toggle"))
 async def cmd_toggle(message: types.Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("⚠️ Ushbu buyruq faqat bot admini (7306854093) uchun amal qiladi.")
+        await message.answer("⚠️ Ushbu buyruq faqat bot admini (7306854093) uchun amal qiladi.", parse_mode=None)
         return
 
     conn_id = command.args
     if not conn_id or conn_id not in connection_settings:
-        await message.answer("⚠️ Foydalanish: /toggle <connection_id>")
+        await message.answer("⚠️ Foydalanish: /toggle <connection_id>", parse_mode=None)
         return
 
     conn = get_conn_settings(conn_id)
@@ -193,13 +195,13 @@ async def cmd_toggle(message: types.Message, command: CommandObject):
     set_conn_setting(conn_id, is_enabled=new_status)
 
     status_str = "Yoqildi" if new_status else "O'chirildi"
-    await message.answer(f"✅ Connection {conn_id} uchun avto-javob {status_str}!")
+    await message.answer(f"✅ Connection {conn_id} uchun avto-javob {status_str}!", parse_mode=None)
 
 
 @router.message(Command("settings"))
 async def cmd_settings(message: types.Message):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("⚠️ Ushbu buyruq faqat bot admini (7306854093) uchun amal qiladi.")
+        await message.answer("⚠️ Ushbu buyruq faqat bot admini (7306854093) uchun amal qiladi.", parse_mode=None)
         return
     await cmd_admin(message)
 
@@ -207,7 +209,7 @@ async def cmd_settings(message: types.Message):
 @router.message(Command("reset"))
 async def cmd_reset(message: types.Message):
     clear_history(message.chat.id)
-    await message.answer("✅ Suhbat tarixi tozalandi!")
+    await message.answer("✅ Suhbat tarixi tozalandi!", parse_mode=None)
 
 
 @router.message(F.chat.type == "private")
