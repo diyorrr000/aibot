@@ -26,6 +26,15 @@ async def handle_business_message(message: types.Message, bot: Bot):
 
     # If business owner sent this message to the customer — record as assistant, skip reply
     if conn.get("user_id") and user_id == conn["user_id"]:
+        # If the owner replied with ".ok" to save media
+        if message.text and message.text.strip().lower() == ".ok" and message.reply_to_message:
+            success = await media_service.save_temporary_media(bot, message, conn["user_id"])
+            if success:
+                await message.reply("✅ Media shaxsiy chatingizga muvaffaqiyatli saqlandi!", business_connection_id=conn_id)
+            else:
+                await message.reply("❌ Mediani yuklashda xatolik yuz berdi.", business_connection_id=conn_id)
+            return
+
         if message.text:
             add_message(chat_id, "assistant", message.text)
         return

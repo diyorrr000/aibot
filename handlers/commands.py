@@ -1,12 +1,23 @@
 import logging
-from aiogram import Router, types
+from aiogram import Router, types, Bot, F
+from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandObject
 
-from storage import get_conn_settings, set_conn_setting, clear_history, connection_settings
+from storage import (
+    get_conn_settings, 
+    set_conn_setting, 
+    clear_history, 
+    connection_settings,
+    add_message,
+    get_history
+)
 from config import settings
+from services.gemini_service import gemini_service
+from services.media_service import media_service
 
 logger = logging.getLogger(__name__)
 router = Router()
+
 
 
 def find_user_connection(user_id: int):
@@ -101,3 +112,78 @@ async def cmd_toggle(message: types.Message):
 async def cmd_reset(message: types.Message):
     clear_history(message.chat.id)
     await message.answer("✅ Suhbat tarixi tozalandi!")
+
+
+@router.message(F.chat.type == "private")
+async def handle_private_message(message: types.Message, bot: Bot):
+    # 1. Check if user is replying with ".ok" to save temporary media
+    if message.text and message.text.strip().lower() == ".ok" and message.reply_to_message:
+        success = await media_service.save_temporary_media(bot, message, message.chat.id)
+        if success:
+            await message.reply("✅ Media shaxsiy chatingizga muvaffaqiyatli saqlandi!")
+        else:
+            await message.reply("❌ Mediani saqlashda xatolik yuz berdi (muddati o'tgan yoki yuklab bo'lmaydi).")
+        return
+
+    # 2. Send typing action
+    try:
+        await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+    except Exception:
+        pass
+
+    # 3. Process media content
+    gemini_contents = []
+    log_content = ""
+
+    if message.photo:
+        gemini_contents = await media_service.process_photo(bot, message.photo, message.caption or "")
+        log_content = f"[Rasm] {message.caption or ''}"
+    elif message.voice:
+        gemini_contents = await media_service.process_voice(bot, message.voice)
+        log_content = "[Ovozli xabar]"
+    elif message.document:
+        gemini_contents = await media_service.process_document(bot, message.document, message.caption or "")
+        log_content = f"[Hujjat: {message.document.file_name}]"
+    elif message.text:
+        gemini_contents = [message.text]
+        log_content = message.text
+    else:
+        gemini_contents = ["Kechirasiz, ushbu turdagi xabarlarni hali qo'llab-quvvatlamayman."]
+        log_content = "[Qo'llab-quvvatlanmaydigan media]"
+
+    # 4. Build chat history context
+    history = get_history(message.chat.id, limit=settings.max_history_length)
+    history_text = ""
+    if history:
+        history_text = "Oldingi suhbat:\n"
+        for h in history:
+            role_label = "Foydalanuvchi" if h["role"] == "user" else "Yordamchi"
+            history_text += f"{role_label}: {h['content']}\n"
+        history_text += "\nYangi xabar:\n"
+
+    final_contents = []
+    if history_text:
+        final_contents.append(history_text)
+    final_contents.extend(gemini_contents)
+
+    add_message(message.chat.id, "user", log_content)
+
+    # 5. Generate response using Gemini 2.5 Flash Lite
+    try:
+        reply_text = await gemini_service.generate_response(
+            contents=final_contents,
+            system_prompt=settings.default_system_prompt,
+            model="gemini-2.5-flash-lite"
+        )
+    except Exception as e:
+        logger.error(f"Gemini API error in private chat: {e}", exc_info=True)
+        reply_text = "Kechirasiz, vaqtinchalik xatolik yuz berdi. Iltimos, birozdan so'ng qayta urinib ko'ring."
+
+    add_message(message.chat.id, "assistant", reply_text)
+
+    # 6. Send reply to user
+    try:
+        await message.answer(text=reply_text, parse_mode="Markdown")
+    except Exception:
+        await message.answer(text=reply_text)
+

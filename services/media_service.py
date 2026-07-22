@@ -115,4 +115,84 @@ class MediaService:
             
         return [doc_part, prompt_text]
 
+    @classmethod
+    async def save_temporary_media(cls, bot: Bot, message: types.Message, target_chat_id: int) -> bool:
+        """
+        Download temporary/view-once media and send to the target chat.
+        """
+        reply = message.reply_to_message
+        if not reply:
+            return False
+
+        file_id = None
+        media_type = None
+        caption = f"💾 Saqlangan media (Suhbat: {message.chat.full_name or 'Noma\'lum'})"
+
+        if reply.photo:
+            file_id = reply.photo[-1].file_id
+            media_type = "photo"
+        elif reply.video:
+            file_id = reply.video.file_id
+            media_type = "video"
+        elif reply.voice:
+            file_id = reply.voice.file_id
+            media_type = "voice"
+        elif reply.document:
+            file_id = reply.document.file_id
+            media_type = "document"
+        elif reply.audio:
+            file_id = reply.audio.file_id
+            media_type = "audio"
+        elif reply.animation:
+            file_id = reply.animation.file_id
+            media_type = "animation"
+        elif reply.video_note:
+            file_id = reply.video_note.file_id
+            media_type = "video_note"
+
+        if not file_id:
+            return False
+
+        try:
+            file_info = await bot.get_file(file_id)
+            file_bytes = await bot.download_file(file_info.file_path)
+            
+            # Use BufferedInputFile to avoid restrictions on file_id forwarding
+            filename = file_info.file_path.split("/")[-1]
+            input_file = types.BufferedInputFile(file_bytes.read(), filename=filename)
+
+            if media_type == "photo":
+                await bot.send_photo(chat_id=target_chat_id, photo=input_file, caption=caption)
+            elif media_type == "video":
+                await bot.send_video(chat_id=target_chat_id, video=input_file, caption=caption)
+            elif media_type == "voice":
+                await bot.send_voice(chat_id=target_chat_id, voice=input_file, caption=caption)
+            elif media_type == "document":
+                await bot.send_document(chat_id=target_chat_id, document=input_file, caption=caption)
+            elif media_type == "audio":
+                await bot.send_audio(chat_id=target_chat_id, audio=input_file, caption=caption)
+            elif media_type == "animation":
+                await bot.send_animation(chat_id=target_chat_id, animation=input_file, caption=caption)
+            elif media_type == "video_note":
+                await bot.send_video_note(chat_id=target_chat_id, video_note=input_file)
+
+            return True
+        except Exception as e:
+            logger.error(f"Error downloading/saving temporary media: {e}", exc_info=True)
+            # Direct file_id send fallback
+            try:
+                if media_type == "photo":
+                    await bot.send_photo(chat_id=target_chat_id, photo=file_id, caption=caption)
+                elif media_type == "video":
+                    await bot.send_video(chat_id=target_chat_id, video=file_id, caption=caption)
+                elif media_type == "voice":
+                    await bot.send_voice(chat_id=target_chat_id, voice=file_id, caption=caption)
+                elif media_type == "document":
+                    await bot.send_document(chat_id=target_chat_id, document=file_id, caption=caption)
+                return True
+            except Exception as e2:
+                logger.error(f"Fallback direct send also failed: {e2}")
+                return False
+
 media_service = MediaService()
+
