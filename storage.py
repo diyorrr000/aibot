@@ -81,4 +81,36 @@ def toggle_userbot_module(user_id: int, module_key: str) -> bool:
     mods[module_key] = not mods.get(module_key, True)
     return mods[module_key]
 
+# ─────────────────────────────────────────────────────────
+# TIMER CONFIG (.time / .settime) — persisted to disk
+# ─────────────────────────────────────────────────────────
+import json
+import os
+
+TIMER_FILE = "database/timer_config.json"
+
+DEFAULT_TIMER = {
+    "date": "01.01.2027",
+    "msg": "🎄 <b>Yangi yilgacha {date} qoldi!</b>\n🥰 <i>Yangi yilni do'stlar davrasida kutamiz</i>"
+}
+
+def get_timer_config() -> Dict[str, str]:
+    try:
+        if os.path.exists(TIMER_FILE):
+            with open(TIMER_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("date") and data.get("msg"):
+                    return data
+    except Exception:
+        pass
+    return dict(DEFAULT_TIMER)
+
+def save_timer_config(date: str, msg: str):
+    try:
+        os.makedirs(os.path.dirname(TIMER_FILE), exist_ok=True)
+        with open(TIMER_FILE, "w", encoding="utf-8") as f:
+            json.dump({"date": date, "msg": msg}, f, ensure_ascii=False, indent=4)
+    except Exception:
+        pass
+
 

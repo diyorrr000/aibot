@@ -59,18 +59,32 @@ async def update_clock_task(bot: Bot):
                 except Exception as e:
                     logger.debug(f"Bot short description clock failed: {e}")
 
-                # Update connected business profile last_name with bold time (e.g. 𝟏𝟗:𝟓𝟓)
-                for conn_id, conn in list(connection_settings.items()):
-                    if conn.get("is_enabled") and conn.get("user_id"):
-                        fn = conn.get("first_name") or "User"
-                        try:
-                            await bot.set_business_account_name(
-                                business_connection_id=conn_id,
-                                first_name=fn,
-                                last_name=bold_time
-                            )
-                        except Exception as e:
-                            logger.warning(f"Business account name clock failed for {conn_id}: {e}")
+            # Update connected business profiles where the owner enabled .soat / .soatbio
+            for conn_id, conn in list(connection_settings.items()):
+                if not conn.get("user_id"):
+                    continue
+                clock_on = conn.get("clock")
+                bio_on = conn.get("clock_bio")
+                if not clock_on and not bio_on:
+                    continue
+                now_raw = datetime.now(uzb_tz).strftime("%H:%M")
+                if clock_on:
+                    fn = conn.get("orig_first_name") or conn.get("first_name") or "User"
+                    try:
+                        await bot.set_business_account_name(
+                            business_connection_id=conn_id,
+                            first_name=fn,
+                            last_name=to_bold_time(now_raw)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Business name clock failed for {conn_id}: {e}")
+                if bio_on and hasattr(bot, "set_business_account_bio"):
+                    try:
+                        now_date = datetime.now(uzb_tz).strftime("%d.%m.%Y")
+                        bio = f"🕒 Soat: {now_raw} | 📅 Sana: {now_date}"
+                        await bot.set_business_account_bio(business_connection_id=conn_id, bio=bio)
+                    except Exception as e:
+                        logger.warning(f"Business bio clock failed for {conn_id}: {e}")
         except Exception as e:
             logger.error(f"Clock update task error: {e}")
 

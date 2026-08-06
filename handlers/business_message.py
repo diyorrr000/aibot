@@ -1,9 +1,13 @@
+import asyncio
+import functools
 import logging
 from aiogram import Router, Bot, types
 from aiogram.enums import ChatAction
 
 from services.claude_service import claude_service
 from services.media_service import media_service
+from services import userbot_aiogram as ua
+from services.animations_service import run_aiogram_animation, ANIMATIONS
 from storage import get_conn_settings, add_message, get_history
 from config import settings
 
@@ -12,83 +16,194 @@ router = Router()
 
 # All valid userbot commands (for correction suggestions)
 VALID_COMMANDS = [
-    ".help", ".ping", ".ai", ".grok", ".tr", ".tts", ".co", ".love",
-    ".clock", ".yt", ".tt", ".weather", ".q", ".meme", ".baza",
-    ".anime", ".currency", ".lyrics", ".roulette", ".roleplay",
-    ".read", ".upload", ".telegraph", ".gender", ".shortlink", ".ok",
+    ".help", ".ping", ".ok",
+    # AI
+    ".ai", ".grok",
+    # Tarjima / Ovoz
+    ".tr", ".tts", ".t2s",
+    # Animatsiya
+    ".love", ".co", ".fun", ".komandalar",
+    # Media / Ma'lumot
+    ".yt", ".weather", ".q", ".r", ".meme", ".rmeme",
+    ".anime", ".ra", ".aq", ".animequote", ".art",
+    ".currency", ".kurs", ".lyrics", ".gender", ".shortlink", ".shlink",
+    ".telegraph",
+    # O'yin / Rol
+    ".roulette", ".ro", ".me", ".do", ".try", ".todo",
+    # Akkunt / Server
+    ".acc", ".status", ".getid",
+    # Timer
+    ".time", ".settime",
+    # Fayllar
+    ".rf", ".read", ".upload",
+    ".catbox", ".envs", ".kappa", ".oxo", ".0x0", ".x0", ".tmpfiles", ".pomf", ".bash",
+    # Profil soati
+    ".soat", ".soatbio",
+    # Auto
+    ".auto", ".stopauto",
 ]
 
 COMMAND_HELP = {
-    ".help":     "📋 Buyruqlar ro'yxati: shunchaki .help yozing.",
-    ".ping":     "🏓 Ping: .ping — bot javob beradi.",
-    ".ai":       "🤖 AI: .ai [savol] — Misol: .ai Toshkent qayerda?",
-    ".grok":     "🌌 Grok: .grok [savol] — Misol: .grok kelajak haqida ayt",
-    ".tr":       "🌐 Tarjima: .tr [til] [matn] — Misol: .tr en Salom dunyo",
-    ".tts":      "🗣 Ovoz: .tts [matn] — Misol: .tts Assalomu alaykum",
-    ".co":       "💫 Animatsiya: .co [matn] — Misol: .co salom",
-    ".love":     "❤️ Love: .love",
-    ".clock":    "🕒 Soat: .clock — Profilingizga O'zbekiston soatini qo'shadi",
-    ".yt":       "▶️ YouTube: .yt [havola] — Misol: .yt https://youtu.be/xxx",
-    ".tt":       "🎵 TikTok: .tt [havola] — Misol: .tt https://tiktok.com/xxx",
-    ".weather":  "⛅ Ob-havo: .weather [shahar] — Misol: .weather Samarqand",
-    ".q":        "💬 Iqtibos: .q — Random hikmatli gap",
-    ".meme":     "😂 Meme: .meme — Random meme",
-    ".baza":     "🗃 Ma'lumot: .baza [so'z] — Misol: .baza python",
-    ".anime":    "🎌 Anime: .anime — Random anime rasm",
-    ".currency": "💱 Valyuta: .currency [kod] — Misol: .currency USD",
-    ".lyrics":   "🎵 Qo'shiq: .lyrics [nom] — Misol: .lyrics Bahor keldi",
-    ".roulette": "🎰 Ruletka: .roulette — O'yin!",
-    ".roleplay": "🎭 Rol: .roleplay [xarakter] — Misol: .roleplay hakim",
-    ".read":     "📄 Fayl: .read — Javobdagi faylni o'qiydi",
-    ".upload":   "📤 Yuklash: .upload — Faylni Telegraph ga yuklaydi",
-    ".telegraph":"📝 Telegraph: .telegraph [sarlavha] [matn]",
-    ".gender":   "👤 Jins: .gender [ism] — Misol: .gender Dilnoza",
-    ".shortlink":"🔗 Link: .shortlink [url] — Misol: .shortlink https://google.com",
-    ".ok":       "✅ Media saqlash: javobga .ok yozing",
+    ".help":       "📋 Buyruqlar ro'yxati: shunchaki .help yozing.",
+    ".ping":       "🏓 Ping: .ping — bot javob beradi.",
+    ".ai":         "🤖 AI: .ai [savol] — Misol: .ai Toshkent qayerda?",
+    ".grok":       "🌌 Grok: .grok [savol] — Misol: .grok kelajak haqida ayt",
+    ".tr":         "🌐 Tarjima: .tr [til] [matn] — Misol: .tr en Salom dunyo",
+    ".tts":        "🗣 Ovoz: .tts [matn] — Misol: .tts Assalomu alaykum",
+    ".co":         "💫 Buyruqlar/Animatsiyalar: .co",
+    ".love":       "❤️ Love: .love",
+    ".yt":         "▶️ YouTube: .yt [qidiruv] — Misol: .yt O'zbekiston",
+    ".weather":    "⛅ Ob-havo: .weather [shahar] — Misol: .weather Samarqand",
+    ".q":          "💬 Quote: .q — xabarga reply qilib stiker yasash",
+    ".r":          "🗨 Stiker: .r [matn] — xabarga reply qilib stiker yasash",
+    ".meme":       "😂 Meme: .meme — Random meme",
+    ".rmeme":      "😂 Meme: .rmeme — Random meme",
+    ".anime":      "🎌 Anime: .anime — Random anime tavsiyasi",
+    ".aq":         "🍿 Anime sitata: .aq [anime]",
+    ".art":        "🖼 Anime surat: .art",
+    ".currency":   "💱 Valyuta: .currency — Markaziy bank kurslari",
+    ".lyrics":     "🎵 Qo'shiq: .lyrics [nom] — Misol: .lyrics Bahor keldi",
+    ".roulette":   "🎰 Ruletka: .ro / .roulette — O'yin!",
+    ".me":         "🌀 RolePlay: .me [harakat]",
+    ".do":         "🌀 RolePlay: .do [voqea]",
+    ".try":        "🌀 RolePlay: .try [harakat]",
+    ".todo":       "🌀 RolePlay: .todo [fraza] [harakat]",
+    ".acc":        "👤 Akkunt: .acc [id] — akkunt haqida ma'lumot",
+    ".status":     "🖥 Server holati: .status",
+    ".getid":      "🔖 Emoji ID: .getid — premium emojiga reply qiling",
+    ".time":       "🎄 Timer: .time — voqegacha qolgan vaqt",
+    ".settime":    "⏱ Timer sozlash: .settime 01.01.2027 | Xabar",
+    ".rf":         "📄 Fayl: .rf — faylga reply qilib o'qish",
+    ".catbox":     "📤 Yuklash: .catbox — faylga reply qiling",
+    ".soat":       "🕒 Soat: .soat on|off — Ismga soat qo'shish",
+    ".soatbio":    "🕒 Bio soat: .soatbio on|off",
+    ".auto":       "📣 Reklama: .auto @guruh 60 | Xabar",
+    ".stopauto":   "🛑 To'xtatish: .stopauto @guruh",
+    ".gender":     "👤 Jins: .gender [ism] — Misol: .gender Dilnoza",
+    ".shortlink":  "🔗 Link: .shortlink [url] — Misol: .shortlink https://google.com",
+    ".telegraph":  "📝 Telegraph: .telegraph Sarlavha | Matn",
+    ".ok":         "✅ Media saqlash: javobga .ok yozing",
 }
 
 HELP_TEXT = """📋 USERBOT BUYRUQLAR RO'YXATI
 
 🤖 AI
-  .ai [savol] — Claude bilan gaplashing
-  .grok [savol] — Grok bilan gaplashing
+  .ai [savol] — DeepSeek AI bilan gaplashing
+  .grok [savol] — Grok AI bilan gaplashing
 
 🌐 Tarjima va Ovoz
   .tr [til] [matn] — Tarjima (en, ru, uz, ar...)
   .tts [matn] — Matnni ovozga aylantir
 
 🎭 Animatsiya
-  .co [matn] — Animatsiya effekti
-  .love — Sevgi animatsiyasi
+  .love, .snow, .xd, .police, .kill ... — animatsiyalar (.co)
+  .co — barcha buyruqlar ro'yxati
 
 📥 Media
-  .yt [havola] — YouTube video/audio
-  .tt [havola] — TikTok video
+  .yt [qidiruv] — YouTube dan qidirish
   .ok — Javobdagi mediani saqlash
+  .catbox, .envs, .kappa ... — faylni yuklash (reply qilib)
+  .rf — faylni o'qish (reply qilib)
+  .r [matn] — stiker yasash (reply qilib)
+  .q — quote stiker (reply qilib)
+  .rmeme — random meme
+  .telegraph Sarlavha | Matn — maqola yaratish
 
 🌍 Ma'lumot
   .weather [shahar] — Ob-havo
-  .currency [kod] — Valyuta kursi
+  .currency — Valyuta kursi
   .lyrics [nom] — Qo'shiq matni
   .gender [ism] — Jins taxmini
+  .shortlink [url] — URL qisqartirish
+  .acc — Akkunt ma'lumoti
+  .status — Server holati
+  .getid — Premium emoji ID
 
 🎮 O'yin va Ijod
-  .q — Hikmatli gap
-  .meme — Random meme
-  .anime — Anime rasm
-  .roulette — Ruletka o'yini
-  .roleplay [xarakter] — Rol o'ynash
-  .baza [so'z] — Ma'lumotlar bazasi
+  .ro — Rus ruletkasi
+  .me / .do / .try / .todo — RolePlay
+  .anime — Random anime
+  .aq — Anime sitata
+  .art — Anime surat
+  .time / .settime — Timer
 
-🔧 Vositalar
-  .clock — Profilga soat qo'shish
-  .shortlink [url] — URL qisqartirish
-  .telegraph — Telegraph post
-  .read — Faylni o'qish
-  .upload — Telegraph ga yuklash
+🕒 Profil
+  .soat on|off — Ismga soat
+  .soatbio on|off — Bioga soat
   .ping — Bot holati
 
+📣 Avtomatik
+  .auto @guruh 60 | Xabar — auto-reklama
+  .stopauto @guruh — to'xtatish
+
 Yordam: har bir buyruqni xato yozsangiz, to'g'ri foydalanishni ko'rsataman."""
+
+
+# ─────────────────────────────────────────────────────────────
+# COMMAND DISPATCH  (buyruq -> handler)
+# ─────────────────────────────────────────────────────────────
+
+UPLOAD_SERVICES = {
+    ".catbox": "catbox",
+    ".upload": "catbox",
+    ".envs": "envs",
+    ".kappa": "kappa",
+    ".oxo": "0x0",
+    ".0x0": "0x0",
+    ".x0": "x0",
+    ".tmpfiles": "tmpfiles",
+    ".pomf": "pomf",
+    ".bash": "bash",
+}
+
+COMMAND_DISPATCH = {
+    ".ai": ua.cmd_ai,
+    ".grok": ua.cmd_grok,
+    ".tr": ua.cmd_translate,
+    ".tts": ua.cmd_tts,
+    ".t2s": ua.cmd_tts,
+    ".weather": ua.cmd_weather,
+    ".currency": ua.cmd_currency,
+    ".kurs": ua.cmd_currency,
+    ".lyrics": ua.cmd_lyrics,
+    ".shortlink": ua.cmd_shortlink,
+    ".shlink": ua.cmd_shortlink,
+    ".gender": ua.cmd_gender,
+    ".telegraph": ua.cmd_telegraph,
+    ".yt": ua.cmd_yt_search,
+    ".anime": ua.cmd_random_anime,
+    ".ra": ua.cmd_random_anime,
+    ".aq": ua.cmd_anime_quote,
+    ".animequote": ua.cmd_anime_quote,
+    ".art": ua.cmd_anime_art,
+    ".q": ua.cmd_quote,
+    ".r": ua.cmd_spoof_quote,
+    ".ro": ua.cmd_roulette,
+    ".roulette": ua.cmd_roulette,
+    ".me": ua.cmd_me,
+    ".do": ua.cmd_do,
+    ".try": ua.cmd_try,
+    ".todo": ua.cmd_todo,
+    ".acc": ua.cmd_acc,
+    ".status": ua.cmd_status,
+    ".getid": ua.cmd_getid,
+    ".time": ua.cmd_time,
+    ".settime": ua.cmd_settime,
+    ".rf": ua.cmd_read_file,
+    ".read": ua.cmd_read_file,
+    ".meme": ua.cmd_random_meme,
+    ".rmeme": ua.cmd_random_meme,
+    ".soat": ua.cmd_soat,
+    ".soatbio": ua.cmd_soatbio,
+    ".auto": ua.cmd_auto,
+    ".stopauto": ua.cmd_stopauto,
+    ".fun": ua.cmd_fun_list,
+    ".co": ua.cmd_fun_list,
+    ".komandalar": ua.cmd_fun_list,
+}
+
+for _cmd, _svc in UPLOAD_SERVICES.items():
+    COMMAND_DISPATCH[_cmd] = functools.partial(ua.cmd_upload, service=_svc)
 
 
 def find_closest_command(text: str):
@@ -102,6 +217,54 @@ def find_closest_command(text: str):
     # Partial prefix match
     matches = [c for c in VALID_COMMANDS if c.startswith(t) or t.startswith(c[:3])]
     return matches[0] if len(matches) == 1 else None
+
+
+async def handle_owner_command(bot: Bot, message: types.Message, conn_id: str, cmd_word: str, args: str):
+    """Run a single userbot command from the owner. Returns True if it was a command."""
+    # Special commands
+    if cmd_word == ".help":
+        await bot.send_message(
+            chat_id=message.chat.id,
+            text=HELP_TEXT,
+            business_connection_id=conn_id,
+            parse_mode=None
+        )
+        return True
+
+    if cmd_word == ".ping":
+        import time
+        start = time.time()
+        msg = await bot.send_message(chat_id=message.chat.id, text="✅ <b>Ping: Tekshirilmoqda...</b>", business_connection_id=conn_id, parse_mode='HTML')
+        end = time.time()
+        ms = round((end - start) * 1000)
+        await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=f"✅ <b>Ping: {ms} ms</b>", business_connection_id=conn_id, parse_mode='HTML')
+        return True
+
+    # Animations (e.g. .love, .snow, ...)
+    anim_name = cmd_word.replace(".", "")
+    if anim_name in ANIMATIONS:
+        asyncio.create_task(run_aiogram_animation(bot, message.chat.id, anim_name, conn_id=conn_id))
+        return True
+
+    # Registered commands
+    handler = COMMAND_DISPATCH.get(cmd_word)
+    if handler:
+        try:
+            await handler(bot, message, conn_id, args)
+        except Exception as e:
+            logger.error(f"Command {cmd_word} error: {e}", exc_info=True)
+            try:
+                await bot.send_message(
+                    chat_id=message.chat.id,
+                    text=f"🚫 <b>'{cmd_word}' da xatolik yuz berdi:</b> <code>{e}</code>",
+                    business_connection_id=conn_id,
+                    parse_mode='HTML'
+                )
+            except Exception:
+                pass
+        return True
+
+    return False
 
 
 @router.business_message()
@@ -133,20 +296,15 @@ async def handle_business_message(message: types.Message, bot: Bot):
             await message.reply(reply, business_connection_id=conn_id)
             return
 
-        # Owner .help — show userbot commands
-        if text.lower() == ".help":
-            await bot.send_message(
-                chat_id=chat_id,
-                text=HELP_TEXT,
-                business_connection_id=conn_id,
-                parse_mode=None
-            )
-            return
-
-        # Owner typed a .command — check if valid, give help if wrong
+        # Owner typed a .command — dispatch it
         if text.startswith(".") and len(text) > 1:
-            cmd_word = text.split()[0].lower()
-            if cmd_word not in VALID_COMMANDS:
+            parts = text.split(maxsplit=1)
+            cmd_word = parts[0].lower()
+            args = parts[1] if len(parts) > 1 else ""
+
+            if cmd_word in VALID_COMMANDS:
+                await handle_owner_command(bot, message, conn_id, cmd_word, args)
+            else:
                 closest = find_closest_command(cmd_word)
                 if closest:
                     help_hint = COMMAND_HELP.get(closest, "")
@@ -168,33 +326,7 @@ async def handle_business_message(message: types.Message, bot: Bot):
                         business_connection_id=conn_id,
                         parse_mode=None
                     )
-                return
-            else:
-                # Valid command -> Check if it's an animation
-                anim_name = cmd_word.replace(".", "")
-                from services.animations_service import run_aiogram_animation, ANIMATIONS
-                if anim_name in ANIMATIONS:
-                    # Run animation using bot.send_message & bot.edit_message_text
-                    import asyncio
-                    asyncio.create_task(run_aiogram_animation(bot, chat_id, anim_name, conn_id=conn_id))
-                    return
-                elif cmd_word == ".ping":
-                    import time
-                    start = time.time()
-                    msg = await bot.send_message(chat_id=chat_id, text="✅ <b>Ping: Tekshirilmoqda...</b>", business_connection_id=conn_id, parse_mode='HTML')
-                    end = time.time()
-                    ms = round((end - start) * 1000)
-                    await bot.edit_message_text(chat_id=chat_id, message_id=msg.message_id, text=f"✅ <b>Ping: {ms} ms</b>", business_connection_id=conn_id, parse_mode='HTML')
-                    return
-                # If it's a valid command but not implemented in aiogram yet (like .weather), just say it's coming
-                elif cmd_word not in [".help", ".ok"]:
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=f"⏳ '{cmd_word}' buyrug'i tez orada Business rejimda ishga tushadi!",
-                        business_connection_id=conn_id,
-                        parse_mode=None
-                    )
-                    return
+            return
 
         # Owner's normal message → record as assistant, don't reply
         if message.text:
