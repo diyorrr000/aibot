@@ -219,6 +219,18 @@ def find_closest_command(text: str):
     return matches[0] if len(matches) == 1 else None
 
 
+def _is_owner_message(message: types.Message, conn: dict) -> bool:
+    """True if the message was sent by the business account owner (not a customer)."""
+    uid = message.from_user.id if message.from_user else None
+    if not uid:
+        return False
+    if conn.get("user_id") == uid:
+        return True
+    # Fallback: the same user may own several connections — match any known owner id.
+    from storage import connection_settings
+    return any(s.get("user_id") == uid for s in connection_settings.values())
+
+
 async def handle_owner_command(bot: Bot, message: types.Message, conn_id: str, cmd_word: str, args: str):
     """Run a single userbot command from the owner. Returns True if it was a command."""
     # Special commands
@@ -286,9 +298,12 @@ async def handle_business_message(message: types.Message, bot: Bot):
         return
 
     text = message.text.strip() if message.text else ""
+    raw_text = (message.text or message.caption or "").strip()
 
     # ── OWNER MESSAGES ──────────────────────────────────────
-    if conn.get("user_id") and user_id == conn["user_id"]:
+    # The owner's OWN messages must NEVER be auto-replied —
+    # the AI only writes back when a customer writes TO the owner.
+    if conn.get("user_id") and _is_owner_message(message, conn):
         # Owner saved media with .ok
         if text.lower() == ".ok" and message.reply_to_message:
             success = await media_service.save_temporary_media(bot, message, conn["user_id"])
@@ -334,6 +349,16 @@ async def handle_business_message(message: types.Message, bot: Bot):
         return
 
     # ── CUSTOMER MESSAGE — AUTO REPLY ────────────────────────
+    # Never auto-reply to messages without a known sender (channel posts etc.)
+    if user_id == 0:
+        logger.info(f"Skipping sender-less message in chat {chat_id} (no AI reply)")
+        return
+
+    # Never auto-reply to commands / dot-prefixed messages
+    if raw_text.startswith("."):
+        logger.info(f"Skipping dot message from {user_id} in chat {chat_id} (no AI reply)")
+        return
+
     # Typing indicator
     try:
         await bot.send_chat_action(

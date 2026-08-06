@@ -45,8 +45,8 @@ def get_conn_settings(connection_id: str) -> Dict[str, Any]:
     if connection_id not in connection_settings:
         connection_settings[connection_id] = {
             "system_prompt": settings.default_system_prompt,
-            "is_enabled": True,
-            "is_approved": True,  # Auto-approved — no admin confirmation needed
+            "is_enabled": False,
+            "is_approved": False,  # Not approved until business_connection update + admin approval
             "user_id": None,
             "username": "Noma'lum",
             "first_name": "",
