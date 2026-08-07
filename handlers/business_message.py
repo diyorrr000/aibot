@@ -285,6 +285,47 @@ async def _send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_m
         await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
 
 
+async def _generate_auto_reply(contents, sys_prompt, preferred_model):
+    """Generate a customer auto-reply. Tries the pinned model first, then falls
+    back to claude → gpt → grok so the bot always answers even when a single AI
+    service is down or slow (the previous version went silent on a timeout)."""
+    chain = []
+    preferred = (preferred_model or "claude").lower()
+    first = preferred if preferred in ("claude", "gpt", "grok", "deepseek") else "claude"
+    chain.append(first)
+    for m in ("claude", "gpt", "grok"):
+        if m != first:
+            chain.append(m)
+
+    for model in chain:
+        try:
+            if model == "deepseek":
+                text_parts = [p for p in contents if isinstance(p, str)]
+                full_query = "\n".join(text_parts) if text_parts else "Salom!"
+                reply = await asyncio.wait_for(
+                    ua.ask_deepseek(full_query, sys_prompt), timeout=30
+                )
+            else:
+                reply = await asyncio.wait_for(
+                    claude_service.generate_response(
+                        contents=contents,
+                        system_prompt=sys_prompt,
+                        model=model,
+                        retries=1,
+                        timeout=15,
+                    ),
+                    timeout=25,
+                )
+            if reply and reply.strip():
+                logger.info(f"Auto-reply answered with model={model}")
+                return reply
+        except asyncio.TimeoutError:
+            logger.warning(f"Auto-reply timeout for model={model}")
+        except Exception as e:
+            logger.warning(f"Auto-reply failed for model={model}: {e}")
+    return None
+
+
 async def handle_owner_command(bot: Bot, message: types.Message, conn_id: str, cmd_word: str, args: str):
     """Run a single userbot command from the owner. Returns True if it was a command."""
     logger.info(f"Owner command: {cmd_word} in chat {message.chat.id} (conn={conn_id})")
@@ -365,7 +406,9 @@ async def handle_business_message(message: types.Message, bot: Bot):
     # The bot serves ONLY the admin's own business account. Any other connected
     # account is completely ignored — no auto-replies, no commands.
     if conn.get("user_id") != ADMIN_ID:
-        logger.info(f"Ignoring non-admin connection {conn_id} (only admin account works)")
+        logger.warning(
+            f"Ignoring connection {conn_id}: conn_user_id={conn.get('user_id')} != ADMIN_ID={ADMIN_ID}"
+        )
         return
 
     text = message.text.strip() if message.text else ""
@@ -439,7 +482,9 @@ async def handle_business_message(message: types.Message, bot: Bot):
 
     # ── CUSTOMER MESSAGE — AUTO REPLY ────────────────────────
     # No approval needed — the bot works immediately for the admin account.
-    if not conn.get("is_enabled") or not conn.get("can_reply", True):
+    # can_reply is NOT checked here: if the business-connection send fails the
+    # reply is re-sent as a normal bot message, so a reply always goes out.
+    if not conn.get("is_enabled"):
         return
 
     # Never auto-reply to messages without a known sender (channel posts etc.)
@@ -543,34 +588,15 @@ async def handle_business_message(message: types.Message, bot: Bot):
     # Model: a chat pinned via .ai/.grok/.model keeps that model until switched.
     selected_model = get_chat_model(conn_id, chat_id) or conn.get("model", "claude")
 
-    try:
-        if selected_model == "deepseek":
-            # DeepSeek (zecora0) — pinned by .ai
-            full_query = (history_text + (gemini_contents[0] if gemini_contents else "")) if history_text else (gemini_contents[0] if gemini_contents else "Salom!")
-            reply_text = await asyncio.wait_for(
-                ua.ask_deepseek(full_query, sys_prompt), timeout=50
-            )
-        else:
-            reply_text = await asyncio.wait_for(
-                claude_service.generate_response(
-                    contents=final_contents,
-                    system_prompt=sys_prompt,
-                    model=selected_model
-                ),
-                timeout=50,
-            )
-    except asyncio.TimeoutError:
-        logger.warning(f"AI timeout in chat {chat_id} (model={selected_model})")
-        reply_text = None
-    except Exception as e:
-        logger.error(f"AI error: {e}", exc_info=True)
-        reply_text = "Kechirasiz, vaqtinchalik xatolik yuz berdi. Birozdan so'ng qayta yozing."
+    # Multi-model fallback chain — the bot never stays silent when one AI is down.
+    reply_text = await _generate_auto_reply(final_contents, sys_prompt, selected_model)
 
     _last_ai_reply[chat_id] = time.time()
 
     if reply_text is None:
-        # AI was too slow — stay silent so the bot never feels frozen.
-        return
+        # Every AI service was down — send a short friendly note so the customer
+        # is never left without an answer.
+        reply_text = "Kechirasiz, hozircha bandman. Birozdan so'ng qayta yozing."
 
     add_message(chat_id, "assistant", reply_text)
 
@@ -584,6 +610,11 @@ async def handle_business_message(message: types.Message, bot: Bot):
         logger.info(f"Business reply sent to {chat_id} via conn={conn_id}")
     except Exception as e:
         logger.error(f"Failed to send business reply: {e}", exc_info=True)
+        try:
+            await bot.send_message(chat_id=chat_id, text=reply_text, parse_mode=None)
+            logger.info(f"Reply sent to {chat_id} via normal bot message")
+        except Exception as e2:
+            logger.error(f"Failed to send normal reply: {e2}", exc_info=True)
 
 
 @router.edited_business_message()
