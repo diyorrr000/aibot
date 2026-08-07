@@ -22,6 +22,13 @@ class RateLimitMiddleware(BaseMiddleware):
         if isinstance(event, Message):
             user_id = event.from_user.id if event.from_user else None
 
+            # Never drop commands: userbot dot-commands (.ai, .help, ...) and
+            # bot commands (/start, ...) must ALWAYS be processed. The per-chat
+            # auto-reply already has its own cooldown in the handler.
+            cmd_text = (event.text or event.caption or "").strip()
+            if cmd_text.startswith((".", "/")):
+                return await handler(event, data)
+
         if user_id:
             now = time.time()
             last_time = self.user_timestamps.get(user_id, 0)
