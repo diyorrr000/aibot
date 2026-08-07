@@ -49,28 +49,37 @@ async def run_aiogram_animation(bot: Bot, chat_id: int, anim_name: str, conn_id:
     frames = ANIMATIONS[anim_name]
     delay = ANIM_DELAYS.get(anim_name, 0.3)
     
+    # Prefer the business connection, fall back to a normal bot message
+    use_conn = conn_id
     try:
-        # Send first frame
         msg = await bot.send_message(
             chat_id=chat_id, 
             text=frames[0], 
             business_connection_id=conn_id, 
             parse_mode='HTML'
         )
-        
-        # Loop and edit
-        for i in range(1, len(frames)):
-            await asyncio.sleep(delay)
-            try:
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=msg.message_id,
-                    text=frames[i],
-                    business_connection_id=conn_id,
-                    parse_mode='HTML'
-                )
-            except Exception:
-                # Ignore edit errors (e.g. if message deleted or same text)
-                pass
-    except Exception as e:
-        pass
+    except Exception:
+        use_conn = None
+        try:
+            msg = await bot.send_message(
+                chat_id=chat_id,
+                text=frames[0],
+                parse_mode='HTML'
+            )
+        except Exception:
+            return
+    
+    # Loop and edit
+    for i in range(1, len(frames)):
+        await asyncio.sleep(delay)
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=msg.message_id,
+                text=frames[i],
+                business_connection_id=use_conn,
+                parse_mode='HTML'
+            )
+        except Exception:
+            # Ignore edit errors (e.g. if message deleted or same text)
+            pass

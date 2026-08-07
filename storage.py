@@ -2,6 +2,8 @@
 In-memory storage for chat histories and business connection settings.
 Includes Admin control functions for approving/disapproving connections.
 """
+import json
+import os
 from collections import defaultdict
 from typing import List, Dict, Any
 
@@ -30,11 +32,52 @@ connection_settings: Dict[str, Dict[str, Any]] = {}
 # Once an AI starts answering in a chat it stays there until changed explicitly.
 chat_models: Dict[str, str] = {}
 
+# ── Disk persistence ───────────────────────────────────────
+# connection_settings / chat_models are in-memory. After a server restart they
+# would be empty, which breaks owner commands in every chat except the bot's
+# private chat. Persisting them lets commands work everywhere even after restarts.
+CONNECTIONS_FILE = "database/connections.json"
+MODELS_FILE = "database/chat_models.json"
+
+
+def _load_json(path: str) -> Dict[str, Any]:
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_json(path: str, data: dict):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _load_persisted():
+    saved = _load_json(CONNECTIONS_FILE)
+    for conn_id, conn in saved.items():
+        if isinstance(conn, dict):
+            connection_settings[conn_id] = conn
+    saved_models = _load_json(MODELS_FILE)
+    for key, model in saved_models.items():
+        if isinstance(model, str):
+            chat_models[key] = model
+
+
 def get_chat_model(conn_id: str, chat_id: int) -> str:
     return chat_models.get(f"{conn_id}:{chat_id}")
 
 def set_chat_model(conn_id: str, chat_id: int, model: str):
     chat_models[f"{conn_id}:{chat_id}"] = model
+    _save_json(MODELS_FILE, chat_models)
 
 def get_history(chat_id: int, limit: int = None) -> List[Dict[str, Any]]:
     history = chat_histories[chat_id]
@@ -79,6 +122,9 @@ def set_conn_setting(connection_id: str, **kwargs):
     s = get_conn_settings(connection_id)
     s.update(kwargs)
     connection_settings[connection_id] = s
+    _save_json(CONNECTIONS_FILE, connection_settings)
+
+_load_persisted()
 
 # Userbot modules toggle state: user_id -> {"module_name": bool}
 userbot_modules: Dict[int, Dict[str, bool]] = defaultdict(lambda: {
@@ -104,9 +150,6 @@ def toggle_userbot_module(user_id: int, module_key: str) -> bool:
 # ─────────────────────────────────────────────────────────
 # TIMER CONFIG (.time / .settime) — persisted to disk
 # ─────────────────────────────────────────────────────────
-import json
-import os
-
 TIMER_FILE = "database/timer_config.json"
 
 DEFAULT_TIMER = {

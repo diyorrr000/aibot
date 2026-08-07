@@ -279,25 +279,38 @@ async def _delete_owner_command(bot: Bot, conn_id: str, message: types.Message):
         logger.debug(f"Could not delete owner command message: {e}")
 
 
+async def _send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_mode=None):
+    """Send a message, preferring the business connection, falling back to a normal message."""
+    try:
+        await bot.send_message(chat_id=chat_id, text=text, business_connection_id=conn_id, parse_mode=parse_mode)
+    except Exception:
+        await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
+
+
 async def handle_owner_command(bot: Bot, message: types.Message, conn_id: str, cmd_word: str, args: str):
     """Run a single userbot command from the owner. Returns True if it was a command."""
+    logger.info(f"Owner command: {cmd_word} in chat {message.chat.id} (conn={conn_id})")
     # Special commands
     if cmd_word == ".help":
-        await bot.send_message(
-            chat_id=message.chat.id,
-            text=HELP_TEXT,
-            business_connection_id=conn_id,
-            parse_mode=None
-        )
+        await _send_text_fb(bot, message.chat.id, HELP_TEXT, conn_id)
         return True
 
     if cmd_word == ".ping":
         import time
         start = time.time()
-        msg = await bot.send_message(chat_id=message.chat.id, text="✅ <b>Ping: Tekshirilmoqda...</b>", business_connection_id=conn_id, parse_mode='HTML')
+        msg = None
+        try:
+            msg = await bot.send_message(chat_id=message.chat.id, text="✅ <b>Ping: Tekshirilmoqda...</b>", business_connection_id=conn_id, parse_mode='HTML')
+            use_conn = conn_id
+        except Exception:
+            msg = await bot.send_message(chat_id=message.chat.id, text="✅ <b>Ping: Tekshirilmoqda...</b>", parse_mode='HTML')
+            use_conn = None
         end = time.time()
         ms = round((end - start) * 1000)
-        await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=f"✅ <b>Ping: {ms} ms</b>", business_connection_id=conn_id, parse_mode='HTML')
+        try:
+            await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=f"✅ <b>Ping: {ms} ms</b>", business_connection_id=use_conn, parse_mode='HTML')
+        except Exception:
+            pass
         return True
 
     # Animations (e.g. .love, .snow, ...)
@@ -313,15 +326,23 @@ async def handle_owner_command(bot: Bot, message: types.Message, conn_id: str, c
             await handler(bot, message, conn_id, args)
         except Exception as e:
             logger.error(f"Command {cmd_word} error: {e}", exc_info=True)
+            err_text = f"🚫 '{cmd_word}' da xatolik yuz berdi: {e}"
             try:
                 await bot.send_message(
                     chat_id=message.chat.id,
-                    text=f"🚫 '{cmd_word}' da xatolik yuz berdi: {e}",
+                    text=err_text,
                     business_connection_id=conn_id,
                     parse_mode=None
                 )
             except Exception:
-                pass
+                try:
+                    await bot.send_message(
+                        chat_id=message.chat.id,
+                        text=err_text,
+                        parse_mode=None
+                    )
+                except Exception:
+                    pass
         return True
 
     return False

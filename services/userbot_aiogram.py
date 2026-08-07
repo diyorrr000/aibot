@@ -64,10 +64,21 @@ async def http_post_json(url: str, data=None, json_body=None, timeout: int = 30)
 
 
 async def send_text(bot: Bot, message: types.Message, conn_id: str, text: str, parse_mode="HTML"):
+    """Send a message, preferring the business connection. Falls back to a
+    normal bot message when the business connection can't reply in that chat."""
+    try:
+        await bot.send_message(
+            chat_id=message.chat.id,
+            text=text,
+            business_connection_id=conn_id,
+            parse_mode=parse_mode,
+        )
+        return
+    except Exception as e:
+        logger.debug(f"Business send failed (fallback to normal): {e}")
     await bot.send_message(
         chat_id=message.chat.id,
         text=text,
-        business_connection_id=conn_id,
         parse_mode=parse_mode,
     )
 
@@ -79,6 +90,11 @@ async def send_typing(bot: Bot, message: types.Message, conn_id: str):
             action=ChatAction.TYPING,
             business_connection_id=conn_id,
         )
+        return
+    except Exception:
+        pass
+    try:
+        await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     except Exception:
         pass
 
