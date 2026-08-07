@@ -258,6 +258,24 @@ def _dedupe_command(chat_id: int, user_id: int, text: str) -> bool:
     return False
 
 
+async def _delete_owner_command(bot: Bot, conn_id: str, message: types.Message):
+    """Delete the owner's dot-command message (best-effort).
+
+    Requires the 'can_delete_all_messages' business bot right, granted when the
+    user connected the bot. If the right is missing, the command still runs —
+    the original message just stays visible.
+    """
+    if not conn_id:
+        return
+    try:
+        await bot.delete_business_messages(
+            business_connection_id=conn_id,
+            message_ids=[message.message_id]
+        )
+    except Exception as e:
+        logger.debug(f"Could not delete owner command message: {e}")
+
+
 async def handle_owner_command(bot: Bot, message: types.Message, conn_id: str, cmd_word: str, args: str):
     """Run a single userbot command from the owner. Returns True if it was a command."""
     # Special commands
@@ -329,7 +347,10 @@ async def handle_business_message(message: types.Message, bot: Bot):
         if text.lower() == ".ok" and message.reply_to_message:
             success = await media_service.save_temporary_media(bot, message, conn["user_id"])
             reply = "✅ Media saqlandi!" if success else "❌ Media yuklab bo'lmadi."
-            await message.reply(reply, business_connection_id=conn_id)
+            await _delete_owner_command(bot, conn_id, message)
+            await bot.send_message(
+                chat_id=chat_id, text=reply, business_connection_id=conn_id, parse_mode=None
+            )
             return
 
         # Owner typed a .command — dispatch it
@@ -339,6 +360,9 @@ async def handle_business_message(message: types.Message, bot: Bot):
             parts = text.split(maxsplit=1)
             cmd_word = parts[0].lower()
             args = parts[1] if len(parts) > 1 else ""
+
+            # Delete the owner's command message immediately, then run the command
+            await _delete_owner_command(bot, conn_id, message)
 
             if cmd_word in VALID_COMMANDS:
                 await handle_owner_command(bot, message, conn_id, cmd_word, args)
