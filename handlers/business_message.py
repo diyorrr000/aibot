@@ -11,7 +11,7 @@ from services.media_service import media_service
 from services import userbot_aiogram as ua
 from services.animations_service import run_aiogram_animation, ANIMATIONS
 from storage import (
-    get_conn_settings, add_message, get_history, get_chat_model,
+    get_conn_settings, set_conn_setting, add_message, get_history, get_chat_model,
     ADMIN_ID, get_greeting_date, set_greeting_date,
 )
 from config import settings
@@ -405,11 +405,31 @@ async def handle_business_message(message: types.Message, bot: Bot):
 
     # The bot serves ONLY the admin's own business account. Any other connected
     # account is completely ignored — no auto-replies, no commands.
-    if conn.get("user_id") != ADMIN_ID:
+    #
+    # NOTE: Render's filesystem is ephemeral, so database/*.json is wiped on
+    # every redeploy. That erases the stored connection user_id, which would
+    # drop every message (customer replies AND owner commands) after a deploy.
+    # Self-heal: only a connection we KNOW belongs to someone else is ignored;
+    # an unknown connection is assumed to be the admin's and re-registered.
+    known_uid = conn.get("user_id")
+    if known_uid is not None and known_uid != ADMIN_ID:
         logger.warning(
-            f"Ignoring connection {conn_id}: conn_user_id={conn.get('user_id')} != ADMIN_ID={ADMIN_ID}"
+            f"Ignoring connection {conn_id}: conn_user_id={known_uid} != ADMIN_ID={ADMIN_ID}"
         )
         return
+
+    if known_uid != ADMIN_ID:
+        logger.warning(
+            f"Connection {conn_id} ownership unknown (post-redeploy wipe) — "
+            f"assuming admin's own account and re-registering it."
+        )
+        set_conn_setting(
+            conn_id,
+            user_id=ADMIN_ID,
+            is_enabled=True,
+            is_approved=True,
+        )
+        conn = get_conn_settings(conn_id)
 
     text = message.text.strip() if message.text else ""
     raw_text = (message.text or message.caption or "").strip()

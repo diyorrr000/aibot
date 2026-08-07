@@ -27,11 +27,14 @@ async def handle_business_connection(business_connection: types.BusinessConnecti
     if is_admin_conn:
         clear_other_connections(conn_id)
 
+    # For the admin's own account the auto-reply is ALWAYS enabled — a False
+    # value in a Telegram connection update (or a stale persisted one) would
+    # otherwise silently stop every customer reply.
     set_conn_setting(
         conn_id,
         user_id=user_id,
         can_reply=can_reply,
-        is_enabled=is_enabled and is_admin_conn,
+        is_enabled=True if is_admin_conn else (is_enabled and is_admin_conn),
         is_approved=is_admin_conn,
         username=username,
         first_name=user.first_name or "",
