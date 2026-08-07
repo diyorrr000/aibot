@@ -19,12 +19,14 @@ async def handle_business_connection(business_connection: types.BusinessConnecti
     else:
         username = user.full_name or "akkount egasi"
 
-    # Save connection (is_approved=False — admin must approve first)
+    # Save connection (is_approved=False — admin must approve first).
+    # is_enabled keeps Telegram's REAL connection state so a later update
+    # (reconnect / re-sync) doesn't silently disable auto-reply.
     set_conn_setting(
         conn_id,
         user_id=user_id,
         can_reply=can_reply,
-        is_enabled=False,         # Disabled until admin approves
+        is_enabled=is_enabled,
         is_approved=False,        # Must be approved by admin
         username=username,
         first_name=user.first_name or "",

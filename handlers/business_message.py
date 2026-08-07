@@ -354,6 +354,12 @@ async def handle_business_message(message: types.Message, bot: Bot):
     if not conn_id:
         return
 
+    uid = message.from_user.id if message.from_user else 0
+    logger.info(
+        f"[BIZ-MSG] chat={message.chat.id} from={uid} conn={conn_id} "
+        f"text='{(message.text or message.caption or '')[:50]}'"
+    )
+
     chat_id = message.chat.id
     user_id = message.from_user.id if message.from_user else 0
     conn = get_conn_settings(conn_id)
