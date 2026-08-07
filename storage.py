@@ -140,9 +140,13 @@ def set_conn_setting(connection_id: str, **kwargs):
     connection_settings[connection_id] = s
     _save_json(CONNECTIONS_FILE, connection_settings)
 
-def clear_other_connections(keep_conn_id: str):
-    """Remove every connection except keep_conn_id — only the newest is kept."""
-    stale = [cid for cid in connection_settings.keys() if cid != keep_conn_id]
+def clear_other_connections(keep_conn_id: str, keep_user_id: int):
+    """Remove the SAME user's older connections, keeping only their newest one.
+    Other users' connections are never touched."""
+    stale = [
+        cid for cid, s in connection_settings.items()
+        if cid != keep_conn_id and s.get("user_id") == keep_user_id
+    ]
     for cid in stale:
         connection_settings.pop(cid, None)
     if stale:

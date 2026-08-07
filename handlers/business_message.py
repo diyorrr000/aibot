@@ -12,7 +12,7 @@ from services import userbot_aiogram as ua
 from services.animations_service import run_aiogram_animation, ANIMATIONS
 from storage import (
     get_conn_settings, set_conn_setting, add_message, get_history, get_chat_model,
-    ADMIN_ID, get_greeting_date, set_greeting_date,
+    get_greeting_date, set_greeting_date,
 )
 from config import settings
 
@@ -238,10 +238,34 @@ def find_closest_command(text: str):
     return matches[0] if len(matches) == 1 else None
 
 
-def _is_owner_message(message: types.Message, conn: dict) -> bool:
-    """Only the admin is treated as the account owner — nobody else is served."""
-    uid = message.from_user.id if message.from_user else None
-    return uid == ADMIN_ID
+def _is_owner_message(message: types.Message, owner_uid) -> bool:
+    """True when the message was sent by the connected account's owner
+    themselves (commands / .ok), as opposed to a customer."""
+    return bool(message.from_user) and message.from_user.id == owner_uid
+
+
+async def _recover_conn(bot: Bot, conn_id: str):
+    """Fetch a connection's owner from Telegram when the local registry was
+    wiped (Render redeploys erase database/*.json). Returns the connection
+    settings dict, or None if the connection no longer exists."""
+    try:
+        bc = await bot.get_business_connection(connection_id=conn_id)
+    except Exception as e:
+        logger.warning(f"Could not fetch business connection {conn_id}: {e}")
+        return None
+    owner_id = bc.user.id
+    username = f"@{bc.user.username}" if bc.user.username else (bc.user.full_name or "akkount egasi")
+    set_conn_setting(
+        conn_id,
+        user_id=owner_id,
+        is_enabled=True,
+        is_approved=True,
+        username=username,
+        first_name=bc.user.first_name or "",
+        last_name=bc.user.last_name or "",
+    )
+    logger.info(f"Recovered business connection {conn_id} owner={owner_id}")
+    return get_conn_settings(conn_id)
 
 
 # Dedup: the same message can arrive as BOTH a "message" and a "business_message"
@@ -393,32 +417,31 @@ async def handle_business_message(message: types.Message, bot: Bot):
     if not conn_id:
         return
 
-    uid = message.from_user.id if message.from_user else 0
-    sender_bot = message.sender_business_bot.id if message.sender_business_bot else None
-    logger.info(
-        f"[BIZ-MSG] chat={message.chat.id} from={uid} conn={conn_id} "
-        f"type={message.chat.type} sender_bot={sender_bot} "
-        f"conn_user={conn.get('user_id')} text='{(message.text or message.caption or '')[:50]}'"
-    )
-
     chat_id = message.chat.id
     user_id = message.from_user.id if message.from_user else 0
     conn = get_conn_settings(conn_id)
 
-    # The bot serves ONLY the admin's own business account. Any other connected
-    # account is completely ignored — no auto-replies, no commands.
+    # Every connected account is served, each under its OWN owner. The bot is
+    # open to everyone: whoever connects their Telegram Business account gets
+    # auto-replies to their customers and userbot commands for themselves.
     #
     # NOTE: Render's filesystem is ephemeral, so database/*.json is wiped on
-    # every redeploy. That erases the stored connection user_id, which would
-    # drop every message (customer replies AND owner commands) after a deploy.
-    # Owner commands are therefore decided by the SENDER, not the registry: an
-    # unknown connection is assumed to be the admin's and re-registered.
-    known_uid = conn.get("user_id")
-    if known_uid is not None and known_uid != ADMIN_ID:
-        logger.warning(
-            f"Ignoring connection {conn_id}: conn_user_id={known_uid} != ADMIN_ID={ADMIN_ID}"
-        )
-        return
+    # every redeploy, losing the conn_id -> owner mapping. Telegram is then
+    # asked directly (get_business_connection) to restore the owner of any
+    # connection we don't recognise yet.
+    owner_uid = conn.get("user_id")
+    if owner_uid is None:
+        conn = await _recover_conn(bot, conn_id)
+        if conn is None:
+            return
+        owner_uid = conn.get("user_id")
+
+    sender_bot = message.sender_business_bot.id if message.sender_business_bot else None
+    logger.info(
+        f"[BIZ-MSG] chat={chat_id} from={user_id} conn={conn_id} "
+        f"type={message.chat.type} sender_bot={sender_bot} "
+        f"owner={owner_uid} text='{(message.text or message.caption or '')[:50]}'"
+    )
 
     text = message.text.strip() if message.text else ""
     raw_text = (message.text or message.caption or "").strip()
@@ -428,30 +451,19 @@ async def handle_business_message(message: types.Message, bot: Bot):
     # the AI only writes back when a customer writes TO the owner.
     # Owner commands ALWAYS work, even if the connection is not yet
     # approved/enabled (approval only gates the customer auto-reply).
-    if _is_owner_message(message, conn):
-        if known_uid != ADMIN_ID:
-            logger.warning(
-                f"Connection {conn_id} ownership unknown (post-redeploy wipe) — "
-                f"re-registering it as the admin's own account."
-            )
-            set_conn_setting(
-                conn_id,
-                user_id=ADMIN_ID,
-                is_enabled=True,
-                is_approved=True,
-            )
-            conn = get_conn_settings(conn_id)
+    if _is_owner_message(message, owner_uid):
         # Owner saved media with .ok — fully SILENT in the source chat: the
         # command message is deleted and the content (media, voice, text, ...)
-        # is sent privately to the admin. Nothing is shown where .ok was used.
+        # is sent privately to the account owner. Nothing is shown where .ok
+        # was used.
         if text.lower() == ".ok":
             await _delete_owner_command(bot, conn_id, message)
             if message.reply_to_message:
-                ok = await media_service.save_temporary_media(bot, message, ADMIN_ID)
+                ok = await media_service.save_temporary_media(bot, message, owner_uid)
                 if not ok:
                     try:
                         await bot.send_message(
-                            chat_id=ADMIN_ID,
+                            chat_id=owner_uid,
                             text="❌ Mediani saqlashda xatolik yuz berdi.",
                             parse_mode=None
                         )
@@ -502,23 +514,9 @@ async def handle_business_message(message: types.Message, bot: Bot):
         return
 
     # ── CUSTOMER MESSAGE — AUTO REPLY ────────────────────────
-    # No approval needed — the bot works immediately for the admin account.
+    # No approval needed — the bot works immediately for every connected account.
     # can_reply is NOT checked here: if the business-connection send fails the
     # reply is re-sent as a normal bot message, so a reply always goes out.
-    # An unknown connection (post-redeploy wipe) is treated as the admin's own.
-    if known_uid != ADMIN_ID:
-        logger.warning(
-            f"Connection {conn_id} ownership unknown (post-redeploy wipe) — "
-            f"assuming admin's own account and re-registering it."
-        )
-        set_conn_setting(
-            conn_id,
-            user_id=ADMIN_ID,
-            is_enabled=True,
-            is_approved=True,
-        )
-        conn = get_conn_settings(conn_id)
-
     if not conn.get("is_enabled"):
         return
 

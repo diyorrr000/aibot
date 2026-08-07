@@ -93,7 +93,7 @@ def build_settings_panel(user_id: int):
     if not connection_settings:
         msg += "ℹ️ Hozircha ulangan Business hisob yo'q.\n"
         msg += "Ulanish uchun: Telegram Settings → Telegram Business → Chat Bots → botni qo'shing.\n"
-        msg += "Ulangandan keyin admin TASDIQLASHI kerak.\n"
+        msg += "Ulangan zahoti bot avtomatik faollashadi.\n"
     else:
         msg += "📋 Ulangan Business Hisoblar:\n\n"
         for conn_id, s in connection_settings.items():
@@ -209,16 +209,12 @@ async def apply_model_change(bot: Bot, conn_id: str, target_model: str):
 @router.message(Command("panel"))
 async def cmd_settings_panel(message: types.Message):
     user_id = message.from_user.id
-    # Userbot faqat admin uchun ishlaydi
-    if user_id != ADMIN_ID:
-        return
+    # Panel hamma uchun ochiq — har bir foydalanuvchi o'z ulanishlarini ko'radi
     await message.answer(build_settings_panel(user_id), parse_mode=None, reply_markup=get_settings_keyboard(user_id))
 
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
-        return
     help_text = "📋 USERBOT BUYRUQLAR RO'YXATI\n\n"
     for cmd, (title, desc) in USERBOT_COMMANDS.items():
         help_text += f"{title}\n  Buyruq: {cmd}\n  {desc}\n\n"
@@ -444,33 +440,38 @@ async def cb_clear_all_connections(callback: types.CallbackQuery):
 # ─────────────────────────────────────────────────────────
 @router.message(F.chat.type == "private")
 async def handle_private_message(message: types.Message, bot: Bot):
-    # Userbot faqat admin uchun ishlaydi
-    if message.from_user.id != ADMIN_ID:
+    user_id = message.from_user.id if message.from_user else 0
+    if not user_id:
         return
 
     text = message.text.strip() if message.text else ""
 
-    # .ok — javobdagi kontentni saqlaydi (jim: buyruq o'chiriladi, adminga yuboriladi)
+    # .ok — javobdagi kontentni saqlaydi (jim: buyruq o'chiriladi, egasiga yuboriladi)
     if text.lower() == ".ok":
         if message.reply_to_message:
-            await media_service.save_temporary_media(bot, message, ADMIN_ID)
+            await media_service.save_temporary_media(bot, message, user_id)
         try:
             await message.delete()
         except Exception:
             pass
         return
 
-    # Userbot buyruqlari shaxsiy chatda ham ishlaydi (hohlagan joyda)
+    # Userbot buyruqlari — Business ulangan foydalanuvchilar uchun
     if text.startswith(".") and len(text) > 1:
+        conn_id, conn = find_user_connection(user_id)
+        if not conn:
+            if user_id != ADMIN_ID:
+                return
+            conn_id = None
         from handlers.business_message import handle_owner_command, _dedupe_command
-        if _dedupe_command(message.chat.id, message.from_user.id, text):
+        if _dedupe_command(message.chat.id, user_id, text):
             return
         parts = text.split(maxsplit=1)
         cmd_word = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
         if cmd_word == ".ok":
             return  # .ok reply'siz — hech narsa qilmaydi
-        handled = await handle_owner_command(bot, message, None, cmd_word, args)
+        handled = await handle_owner_command(bot, message, conn_id, cmd_word, args)
         if not handled:
             await message.answer("❓ Noma'lum buyruq.\n\nBarcha buyruqlar: .help", parse_mode=None)
         return
@@ -492,14 +493,12 @@ async def handle_group_message(message: types.Message, bot: Bot):
     if not user_id:
         return
 
-    # Userbot faqat admin uchun ishlaydi
-    if user_id != ADMIN_ID:
-        return
-
-    # Faqat business akkount egasi uchun ishlaydi
+    # Buyruqlar — Business ulangan foydalanuvchilar uchun ishlaydi
     conn_id, conn = find_user_connection(user_id)
     if not conn:
-        return
+        if user_id != ADMIN_ID:
+            return
+        conn_id = None
 
     from handlers.business_message import handle_owner_command, _dedupe_command
     if _dedupe_command(message.chat.id, user_id, text):
@@ -509,10 +508,10 @@ async def handle_group_message(message: types.Message, bot: Bot):
     cmd_word = parts[0].lower()
     args = parts[1] if len(parts) > 1 else ""
 
-    # .ok — javobdagi kontentni saqlaydi (jim: buyruq o'chiriladi, adminga yuboriladi)
+    # .ok — javobdagi kontentni saqlaydi (jim: buyruq o'chiriladi, egasiga yuboriladi)
     if cmd_word == ".ok":
         if message.reply_to_message:
-            await media_service.save_temporary_media(bot, message, ADMIN_ID)
+            await media_service.save_temporary_media(bot, message, user_id)
         try:
             await message.delete()
         except Exception:
