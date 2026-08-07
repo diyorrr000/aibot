@@ -394,9 +394,11 @@ async def handle_business_message(message: types.Message, bot: Bot):
         return
 
     uid = message.from_user.id if message.from_user else 0
+    sender_bot = message.sender_business_bot.id if message.sender_business_bot else None
     logger.info(
         f"[BIZ-MSG] chat={message.chat.id} from={uid} conn={conn_id} "
-        f"text='{(message.text or message.caption or '')[:50]}'"
+        f"type={message.chat.type} sender_bot={sender_bot} "
+        f"conn_user={conn.get('user_id')} text='{(message.text or message.caption or '')[:50]}'"
     )
 
     chat_id = message.chat.id
@@ -409,27 +411,14 @@ async def handle_business_message(message: types.Message, bot: Bot):
     # NOTE: Render's filesystem is ephemeral, so database/*.json is wiped on
     # every redeploy. That erases the stored connection user_id, which would
     # drop every message (customer replies AND owner commands) after a deploy.
-    # Self-heal: only a connection we KNOW belongs to someone else is ignored;
-    # an unknown connection is assumed to be the admin's and re-registered.
+    # Owner commands are therefore decided by the SENDER, not the registry: an
+    # unknown connection is assumed to be the admin's and re-registered.
     known_uid = conn.get("user_id")
     if known_uid is not None and known_uid != ADMIN_ID:
         logger.warning(
             f"Ignoring connection {conn_id}: conn_user_id={known_uid} != ADMIN_ID={ADMIN_ID}"
         )
         return
-
-    if known_uid != ADMIN_ID:
-        logger.warning(
-            f"Connection {conn_id} ownership unknown (post-redeploy wipe) — "
-            f"assuming admin's own account and re-registering it."
-        )
-        set_conn_setting(
-            conn_id,
-            user_id=ADMIN_ID,
-            is_enabled=True,
-            is_approved=True,
-        )
-        conn = get_conn_settings(conn_id)
 
     text = message.text.strip() if message.text else ""
     raw_text = (message.text or message.caption or "").strip()
@@ -439,7 +428,19 @@ async def handle_business_message(message: types.Message, bot: Bot):
     # the AI only writes back when a customer writes TO the owner.
     # Owner commands ALWAYS work, even if the connection is not yet
     # approved/enabled (approval only gates the customer auto-reply).
-    if conn.get("user_id") and _is_owner_message(message, conn):
+    if _is_owner_message(message, conn):
+        if known_uid != ADMIN_ID:
+            logger.warning(
+                f"Connection {conn_id} ownership unknown (post-redeploy wipe) — "
+                f"re-registering it as the admin's own account."
+            )
+            set_conn_setting(
+                conn_id,
+                user_id=ADMIN_ID,
+                is_enabled=True,
+                is_approved=True,
+            )
+            conn = get_conn_settings(conn_id)
         # Owner saved media with .ok — fully SILENT in the source chat: the
         # command message is deleted and the content (media, voice, text, ...)
         # is sent privately to the admin. Nothing is shown where .ok was used.
@@ -504,6 +505,20 @@ async def handle_business_message(message: types.Message, bot: Bot):
     # No approval needed — the bot works immediately for the admin account.
     # can_reply is NOT checked here: if the business-connection send fails the
     # reply is re-sent as a normal bot message, so a reply always goes out.
+    # An unknown connection (post-redeploy wipe) is treated as the admin's own.
+    if known_uid != ADMIN_ID:
+        logger.warning(
+            f"Connection {conn_id} ownership unknown (post-redeploy wipe) — "
+            f"assuming admin's own account and re-registering it."
+        )
+        set_conn_setting(
+            conn_id,
+            user_id=ADMIN_ID,
+            is_enabled=True,
+            is_approved=True,
+        )
+        conn = get_conn_settings(conn_id)
+
     if not conn.get("is_enabled"):
         return
 
