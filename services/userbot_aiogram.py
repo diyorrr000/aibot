@@ -440,31 +440,58 @@ async def cmd_random_anime(bot, message, conn_id, args):
 
 async def cmd_anime_quote(bot, message, conn_id, args):
     await send_typing(bot, message, conn_id)
-    try:
-        url = "https://animechan.xyz/api/random"
-        if args.strip():
-            url = f"https://animechan.xyz/api/random/anime?title={urllib.parse.quote(args.strip())}"
-        data = await http_get_json(url)
-        quote = data.get("quote", "")
-        character = data.get("character", "")
-        anime = data.get("anime", "")
+    query = args.strip()
+    quote = character = anime = None
+    if query:
+        urls = [
+            f"https://animechan.xyz/api/random/anime?title={urllib.parse.quote(query)}",
+            f"https://api.animechan.io/v1/quotes/random?anime={urllib.parse.quote(query)}",
+        ]
+    else:
+        urls = [
+            "https://animechan.xyz/api/random",
+            "https://api.animechan.io/v1/quotes/random",
+        ]
+    last_err = None
+    for url in urls:
         try:
-            tr = await http_get_json(
-                "https://translate.googleapis.com/translate_a/single",
-                client="gtx", sl="auto", tl="uz", dt="t", q=quote,
-            )
-            quote = "".join(part[0] for part in tr[0]) or quote
-        except Exception:
-            pass
-        output = (
-            f"🍿 <b>Anime Sitatasi:</b>\n\n"
-            f"<blockquote>{quote}</blockquote>\n"
-            f"👤 <b>Qahramon:</b> <code>{character}</code>\n"
-            f"🎬 <b>Anime:</b> <code>{anime}</code>"
+            data = await http_get_json(url, timeout=15)
+            if isinstance(data, dict) and data.get("data") and isinstance(data["data"], dict):
+                d = data["data"]
+                quote = d.get("content") or d.get("quote")
+                character = (d.get("character") or {}).get("name") or d.get("character")
+                anime = (d.get("anime") or {}).get("name") or d.get("anime")
+            else:
+                quote = data.get("quote")
+                character = data.get("character")
+                anime = data.get("anime")
+            if quote:
+                break
+            last_err = Exception("bo'sh javob")
+        except Exception as e:
+            last_err = e
+            continue
+    if not quote:
+        await send_text(
+            bot, message, conn_id,
+            f"{ERROR} <b>Sitat topishda xatolik:</b> <code>{last_err or 'Noma\'lum xato'}</code>"
         )
-        await send_text(bot, message, conn_id, output)
-    except Exception as e:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Sitat topishda xatolik:</b> <code>{e}</code>")
+        return
+    try:
+        tr = await http_get_json(
+            "https://translate.googleapis.com/translate_a/single",
+            client="gtx", sl="auto", tl="uz", dt="t", q=quote,
+        )
+        quote = "".join(part[0] for part in tr[0]) or quote
+    except Exception:
+        pass
+    output = (
+        f"🍿 <b>Anime Sitatasi:</b>\n\n"
+        f"<blockquote>{quote}</blockquote>\n"
+        f"👤 <b>Qahramon:</b> <code>{character}</code>\n"
+        f"🎬 <b>Anime:</b> <code>{anime}</code>"
+    )
+    await send_text(bot, message, conn_id, output)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -473,13 +500,29 @@ async def cmd_anime_quote(bot, message, conn_id, args):
 
 async def cmd_anime_art(bot, message, conn_id, args):
     await send_typing(bot, message, conn_id)
+    img_url = None
+    endpoints = [
+        ("https://api.waifu.pics/sfw/waifu", "url"),
+        ("https://nekos.best/api/v2/waifu", "results.0.url"),
+        ("https://nekos.best/api/v2/neko", "results.0.url"),
+    ]
+    for url, path in endpoints:
+        try:
+            data = await http_get_json(url, timeout=15)
+            cur = data
+            for part in path.split("."):
+                idx = int(part) if part.isdigit() else part
+                cur = cur[idx]
+            img_url = cur
+            if img_url:
+                break
+        except Exception:
+            continue
+    if not img_url:
+        await send_text(bot, message, conn_id, f"{ERROR} <b>Surat topilmadi.</b>")
+        return
     try:
-        data = await http_get_json("https://api.waifu.pics/sfw/waifu")
-        img_url = data.get("url")
-        if not img_url:
-            await send_text(bot, message, conn_id, f"{ERROR} <b>Surat topilmadi.</b>")
-            return
-        img = await http_get_bytes(img_url)
+        img = await http_get_bytes(img_url, timeout=20)
         await bot.send_photo(
             chat_id=message.chat.id,
             photo=types.BufferedInputFile(img, filename="anime.jpg"),
@@ -556,18 +599,56 @@ async def cmd_ai(bot, message, conn_id, args):
         )
         return
     await send_typing(bot, message, conn_id)
+
+    used_model = None
+    answer = None
+
+    # 1) DeepSeek
     try:
         answer = await asyncio.wait_for(
             ask_deepseek(query, AI_SYSTEM_PROMPT), timeout=50
         )
-        if len(answer) > 4000:
-            answer = answer[:4000] + "..."
-        await send_text(bot, message, conn_id, answer, parse_mode=None)
-        set_chat_model(conn_id, message.chat.id, "deepseek")
-    except asyncio.TimeoutError:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>AI javob berishda kechikdi. Qayta urinib ko'ring.</b>")
-    except Exception as e:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Xato:</b> <code>{e}</code>", parse_mode=None)
+        used_model = "deepseek"
+    except Exception:
+        answer = None
+
+    # 2) KILWA fallback zanjiri: qaysi model bo'sh bo'lsa o'sha javob beradi
+    if not answer:
+        from services.ai_service import claude_service
+        chain = [
+            ("claude", "Uzbekcha javob ber"),
+            ("gpt", AI_SYSTEM_PROMPT),
+            ("grok", AI_SYSTEM_PROMPT),
+        ]
+        for model, prompt in chain:
+            try:
+                gen = claude_service.generate_response(
+                    contents=[query],
+                    system_prompt=prompt,
+                    model=model,
+                    retries=1,
+                    timeout=25,
+                )
+                answer = await asyncio.wait_for(gen, timeout=30)
+                if answer:
+                    used_model = model
+                    break
+            except Exception:
+                continue
+
+    if not answer:
+        await send_text(
+            bot, message, conn_id,
+            f"{ERROR} <b>Barcha AI xizmatlari hozircha band.</b>\n"
+            f"Qayta urinib ko'ring yoki <code>.gpt</code> / <code>.grok</code> bilan alohida sinang.",
+            parse_mode=None,
+        )
+        return
+    if len(answer) > 4000:
+        answer = answer[:4000] + "..."
+    await send_text(bot, message, conn_id, answer, parse_mode=None)
+    if used_model:
+        set_chat_model(conn_id, message.chat.id, used_model)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1055,7 +1136,12 @@ async def cmd_time(bot, message, conn_id, args):
         hours = diff.seconds // 3600
         minutes = (diff.seconds // 60) % 60
         seconds = diff.seconds % 60
-        time_text = f"{days} kun, {hours} soat, {minutes} minut, {seconds} sekund"
+        time_text = (
+            f"📅 <b>{days}</b> kun  |  "
+            f"⏰ <b>{hours}</b> soat  |  "
+            f"⏳ <b>{minutes}</b> minut  |  "
+            f"⏱️ <b>{seconds}</b> sekund"
+        )
         await send_text(bot, message, conn_id, cfg["msg"].format(date=time_text))
     except Exception:
         await send_text(

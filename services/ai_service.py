@@ -55,6 +55,7 @@ class KilwaAIService:
         model: str = "claude",
         retries: int = 3,
         delay: float = 1.5,
+        timeout: float = 25,
     ) -> str:
         target_model = model.lower() if model and model.lower() in API_URLS else "claude"
         api_url = API_URLS[target_model]
@@ -79,7 +80,7 @@ class KilwaAIService:
                     async with session.get(
                         api_url,
                         params={"text": full_prompt},
-                        timeout=aiohttp.ClientTimeout(total=25),
+                        timeout=aiohttp.ClientTimeout(total=timeout),
                     ) as resp:
                         if resp.status != 200:
                             raise Exception(f"API returned status {resp.status}")
