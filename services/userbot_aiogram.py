@@ -565,6 +565,19 @@ def owner_nickname(conn) -> str:
 
 AI_SYSTEM_PROMPT = "Siz aqlli va foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblar batafsil, aniq va foydali bo'lsin; bir xil iboralarni takrorlamang va faqat salomlashish bilan cheklanmang."
 
+# .ai buyrug'i uchun maxsus prompt — umumiy AI, shaxsiy yordamchi emas
+AI_CHAT_PROMPT = (
+    "Siz umumiy maqsadli aqlli yordamchisiz (AI chatbot). "
+    "Siz hech qanday shaxsiy akkaunt yoki biznes egasining yordamchisi EMASSIZ. "
+    "QOIDALAR:\n"
+    "1. Har doim o'zbek tilida javob bering.\n"
+    "2. Aniq bilmagan ma'lumotni o'ylab topmang — bilmasangiz, ochiqchasiga "
+    "'Kechirasiz, buni bilmayman' deb ayting, o'zingiz uydirib gapirmang.\n"
+    "3. Javoblar to'g'ridan-to'g'ri, aniq va foydali bo'lsin; savolni qayta yozib "
+    "takrorlamang, keraksiz sarlavha va emoji bezaklar qo'shmang.\n"
+    "4. O'zingizni hech kimning shaxsiy yordamchisi deb tanishtirmang."
+)
+
 
 async def ask_deepseek(query: str, system_prompt: str = AI_SYSTEM_PROMPT) -> str:
     """Ask DeepSeek (zecora0 endpoint) and return the answer text. Raises on failure."""
@@ -622,9 +635,9 @@ async def cmd_ai(bot, message, conn_id, args):
     # KILWA fallback zanjiri: qaysi model bo'sh bo'lsa o'sha javob beradi
     from services.ai_service import claude_service
     chain = [
-        ("claude", "Uzbekcha javob ber"),
-        ("gpt", AI_SYSTEM_PROMPT),
-        ("grok", AI_SYSTEM_PROMPT),
+        ("claude", AI_CHAT_PROMPT),
+        ("gpt", AI_CHAT_PROMPT),
+        ("grok", AI_CHAT_PROMPT),
     ]
     for model, prompt in chain:
         try:
