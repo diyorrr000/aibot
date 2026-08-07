@@ -642,6 +642,46 @@ async def cmd_gpt(bot, message, conn_id, args):
         await send_text(bot, message, conn_id, f"{ERROR} <b>GPT xatosi:</b> <code>{e}</code>", parse_mode=None)
 
 
+async def _quote_generate(payload: dict, endpoints: list) -> bytes:
+    """Generate a quote image, trying each endpoint in order.
+
+    Handles both raw-binary responses (bot.lyo.su/quoteit) and base64-JSON
+    responses (LyoSU quote-api). Raises with the last error if all fail.
+    """
+    last_err = None
+    for url in endpoints:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, json=payload, timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
+                    if resp.status != 200:
+                        last_err = Exception(f"status {resp.status}")
+                        continue
+                    body = await resp.read()
+                    head = body[:100].decode("utf-8", errors="ignore").lstrip()
+                    if head.startswith("{") or head.startswith("["):
+                        try:
+                            data = json.loads(body)
+                            img = None
+                            if isinstance(data, dict):
+                                img = data.get("image") or (data.get("result") or {}).get("image")
+                            if img:
+                                import base64
+                                return base64.b64decode(img)
+                        except Exception:
+                            pass
+                        last_err = Exception("JSON javobda rasm topilmadi")
+                        continue
+                    if len(body) > 100:
+                        return body
+                    last_err = Exception("bo'sh javob")
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err or Exception("Noma'lum xato")
+
+
 # ─────────────────────────────────────────────────────────────
 # QUOTE STICKER  (.q — matnli xabarga reply)
 # ─────────────────────────────────────────────────────────────
@@ -685,16 +725,10 @@ async def cmd_quote(bot, message, conn_id, args):
         ]
     }
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://bot.lyo.su/quoteit/generate",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                if resp.status != 200:
-                    await send_text(bot, message, conn_id, f"{ERROR} <b>Quote API xatosi: {resp.status}</b>")
-                    return
-                image_data = await resp.read()
+        image_data = await _quote_generate(payload, [
+            "https://bot.lyo.su/quoteit/generate",
+            "https://shnwazdev-quoteapi.vercel.app/generate",
+        ])
         img = types.BufferedInputFile(image_data, filename="quote.png")
         await bot.send_photo(
             chat_id=message.chat.id,
@@ -703,7 +737,7 @@ async def cmd_quote(bot, message, conn_id, args):
             business_connection_id=conn_id,
         )
     except Exception as e:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Xatolik:</b> <code>{e}</code>")
+        await send_text(bot, message, conn_id, f"{ERROR} <b>Quote API xatosi:</b> <code>{e}</code>")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -751,23 +785,19 @@ async def cmd_spoof_quote(bot, message, conn_id, args):
         ]
     }
     try:
-        status, data = await http_post_json("https://bot.lyo.su/quote/generate", json_body=payload, timeout=30)
-        if status == 200 and isinstance(data, dict):
-            result = data.get("result")
-            if isinstance(result, dict) and result.get("image"):
-                import base64
-                image_bytes = base64.b64decode(result["image"])
-                f = types.BufferedInputFile(image_bytes, filename="sticker.webp")
-                await bot.send_document(
-                    chat_id=message.chat.id,
-                    document=f,
-                    caption=f"{CHECK} <b>Stiker tayyor!</b>",
-                    business_connection_id=conn_id,
-                )
-                return
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Stiker yasashda xato.</b>")
+        image_bytes = await _quote_generate(payload, [
+            "https://bot.lyo.su/quote/generate",
+            "https://shnwazdev-quoteapi.vercel.app/generate",
+        ])
+        f = types.BufferedInputFile(image_bytes, filename="sticker.webp")
+        await bot.send_document(
+            chat_id=message.chat.id,
+            document=f,
+            caption=f"{CHECK} <b>Stiker tayyor!</b>",
+            business_connection_id=conn_id,
+        )
     except Exception as e:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Xatolik:</b> <code>{e}</code>")
+        await send_text(bot, message, conn_id, f"{ERROR} <b>Stiker yasashda xato:</b> <code>{e}</code>")
 
 
 # ─────────────────────────────────────────────────────────────
