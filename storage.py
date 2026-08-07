@@ -16,6 +16,16 @@ chat_histories: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
 # connection_id -> {"system_prompt": str, "is_enabled": bool, "is_approved": bool, "user_id": int, "username": str}
 connection_settings: Dict[str, Dict[str, Any]] = {}
 
+# Per-chat AI model pin: "conn_id:chat_id" -> model name ("claude"/"grok"/"deepseek").
+# Once an AI starts answering in a chat it stays there until changed explicitly.
+chat_models: Dict[str, str] = {}
+
+def get_chat_model(conn_id: str, chat_id: int) -> str:
+    return chat_models.get(f"{conn_id}:{chat_id}")
+
+def set_chat_model(conn_id: str, chat_id: int, model: str):
+    chat_models[f"{conn_id}:{chat_id}"] = model
+
 def get_history(chat_id: int, limit: int = None) -> List[Dict[str, Any]]:
     history = chat_histories[chat_id]
     if limit:

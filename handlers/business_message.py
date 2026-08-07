@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import logging
+import time
 from aiogram import Router, Bot, types
 from aiogram.enums import ChatAction
 
@@ -8,17 +9,22 @@ from services.claude_service import claude_service
 from services.media_service import media_service
 from services import userbot_aiogram as ua
 from services.animations_service import run_aiogram_animation, ANIMATIONS
-from storage import get_conn_settings, add_message, get_history
+from storage import get_conn_settings, add_message, get_history, get_chat_model
 from config import settings
 
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Per-chat AI cooldown (chat_id -> last reply timestamp) to prevent AI spam
+# without blocking owner commands. Commands always work; only the auto-reply
+# is throttled.
+_last_ai_reply: dict = {}
+
 # All valid userbot commands (for correction suggestions)
 VALID_COMMANDS = [
     ".help", ".ping", ".ok",
     # AI
-    ".ai", ".grok",
+    ".ai", ".grok", ".gpt", ".model",
     # Tarjima / Ovoz
     ".tr", ".tts", ".t2s",
     # Animatsiya
@@ -48,6 +54,8 @@ COMMAND_HELP = {
     ".ping":       "🏓 Ping: .ping — bot javob beradi.",
     ".ai":         "🤖 AI: .ai [savol] — Misol: .ai Toshkent qayerda?",
     ".grok":       "🌌 Grok: .grok [savol] — Misol: .grok kelajak haqida ayt",
+    ".gpt":        "🤖 GPT: .gpt [savol] — Misol: .gpt massiv nima?",
+    ".model":      "🎛 Model: .model claude|grok|gpt|deepseek — Bu chat uchun AI modelni pinlash",
     ".tr":         "🌐 Tarjima: .tr [til] [matn] — Misol: .tr en Salom dunyo",
     ".tts":        "🗣 Ovoz: .tts [matn] — Misol: .tts Assalomu alaykum",
     ".co":         "💫 Buyruqlar/Animatsiyalar: .co",
@@ -90,6 +98,8 @@ HELP_TEXT = """📋 USERBOT BUYRUQLAR RO'YXATI
 🤖 AI
   .ai [savol] — DeepSeek AI bilan gaplashing
   .grok [savol] — Grok AI bilan gaplashing
+  .gpt [savol] — GPT AI bilan gaplashing
+  .model claude|grok|gpt|deepseek — Bu chat uchun AI modelni pinlash
 
 🌐 Tarjima va Ovoz
   .tr [til] [matn] — Tarjima (en, ru, uz, ar...)
@@ -159,6 +169,8 @@ UPLOAD_SERVICES = {
 COMMAND_DISPATCH = {
     ".ai": ua.cmd_ai,
     ".grok": ua.cmd_grok,
+    ".gpt": ua.cmd_gpt,
+    ".model": ua.cmd_model,
     ".tr": ua.cmd_translate,
     ".tts": ua.cmd_tts,
     ".t2s": ua.cmd_tts,
@@ -359,6 +371,13 @@ async def handle_business_message(message: types.Message, bot: Bot):
         logger.info(f"Skipping dot message from {user_id} in chat {chat_id} (no AI reply)")
         return
 
+    # Per-chat AI cooldown — prevents the bot from replying to rapid spam
+    # but never blocks commands (owner branch handled above).
+    now = time.time()
+    if chat_id in _last_ai_reply and now - _last_ai_reply[chat_id] < settings.rate_limit_seconds:
+        logger.info(f"AI cooldown active in chat {chat_id} — skipping auto reply")
+        return
+
     # Typing indicator
     try:
         await bot.send_chat_action(
@@ -419,17 +438,37 @@ async def handle_business_message(message: types.Message, bot: Bot):
             f"Javoblar qisqa va tabiiy bo'lsin."
         )
 
-    selected_model = conn.get("model", "claude")
+    # Model: a chat pinned via .ai/.grok/.model keeps that model until switched.
+    selected_model = get_chat_model(conn_id, chat_id) or conn.get("model", "claude")
 
     try:
-        reply_text = await claude_service.generate_response(
-            contents=final_contents,
-            system_prompt=sys_prompt,
-            model=selected_model
-        )
+        if selected_model == "deepseek":
+            # DeepSeek (zecora0) — pinned by .ai
+            full_query = (history_text + (gemini_contents[0] if gemini_contents else "")) if history_text else (gemini_contents[0] if gemini_contents else "Salom!")
+            reply_text = await asyncio.wait_for(
+                ua.ask_deepseek(full_query, sys_prompt), timeout=50
+            )
+        else:
+            reply_text = await asyncio.wait_for(
+                claude_service.generate_response(
+                    contents=final_contents,
+                    system_prompt=sys_prompt,
+                    model=selected_model
+                ),
+                timeout=50,
+            )
+    except asyncio.TimeoutError:
+        logger.warning(f"AI timeout in chat {chat_id} (model={selected_model})")
+        reply_text = None
     except Exception as e:
         logger.error(f"AI error: {e}", exc_info=True)
         reply_text = "Kechirasiz, vaqtinchalik xatolik yuz berdi. Birozdan so'ng qayta yozing."
+
+    _last_ai_reply[chat_id] = time.time()
+
+    if reply_text is None:
+        # AI was too slow — stay silent so the bot never feels frozen.
+        return
 
     add_message(chat_id, "assistant", reply_text)
 

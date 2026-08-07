@@ -25,7 +25,8 @@ router = Router()
 
 MODEL_NAMES = {
     "claude": "🧠 Claude Haiku 4.5",
-    "grok":   "🌌 Grok 4.3"
+    "grok":   "🌌 Grok 4.3",
+    "gpt":    "🤖 GPT 4o"
 }
 
 # ─────────────────────────────────────────────────────────
@@ -36,6 +37,8 @@ USERBOT_COMMANDS = {
     ".ping":       ("🏓 Ping", "Botning ishlash holatini tekshiradi."),
     ".ai":         ("🤖 AI savol", "DeepSeek AI. Misol: .ai Uzbekiston poytaxti qaysi?"),
     ".grok":       ("🌌 Grok AI", "Grok modeli. Misol: .grok kelajak haqida ayt"),
+    ".gpt":        ("🤖 GPT AI", "GPT modeli. Misol: .gpt Python nima?"),
+    ".model":      ("🎛 AI Model", "Bu chat uchun model pinlash. Misol: .model claude|grok|gpt|deepseek"),
     ".tr":         ("🌐 Tarjima", "Xabarni tarjima qiladi. Misol: .tr ru Hello world"),
     ".tts":        ("🗣 Ovozli xabar", "Matnni ovozga aylantiradi. Misol: .tts Salom"),
     ".co":         ("💫 Buyruqlar", "Barcha animatsiya va modullar ro'yxati."),
@@ -88,7 +91,8 @@ def build_settings_panel(user_id: int):
     clock_st = "🟢 YOQILGAN (Asia/Tashkent)" if is_clock_enabled() else "🔴 O'CHIRILGAN"
 
     msg = "⚙️ BOT BOSHQARUV PANELI\n\n"
-    msg += f"🕒 Profil Soati: {clock_st}\n\n"
+    msg += f"🕒 Profil Soati: {clock_st}\n"
+    msg += f"📊 Ulangan akkuntlar: {len(connection_settings)} ta\n\n"
 
     if not connection_settings:
         msg += "ℹ️ Hozircha ulangan Business hisob yo'q.\n"
@@ -140,9 +144,11 @@ def get_settings_keyboard(user_id: int):
             # AI Model selection row
             claude_label = "✅ 🧠 Claude 4.5" if curr_m == "claude" else "🧠 Claude 4.5"
             grok_label   = "✅ 🌌 Grok 4.3"   if curr_m == "grok"   else "🌌 Grok 4.3"
+            gpt_label    = "✅ 🤖 GPT 4o"     if curr_m == "gpt"    else "🤖 GPT 4o"
             keyboard.append([
                 InlineKeyboardButton(text=claude_label, callback_data=f"set_model:{conn_id}:claude"),
                 InlineKeyboardButton(text=grok_label,   callback_data=f"set_model:{conn_id}:grok"),
+                InlineKeyboardButton(text=gpt_label,    callback_data=f"set_model:{conn_id}:gpt"),
             ])
 
             # Auto-reply toggle
@@ -198,9 +204,19 @@ async def apply_model_change(bot: Bot, conn_id: str, target_model: str):
 @router.message(Command("start"))
 @router.message(Command("admin"))
 @router.message(Command("settings"))
+@router.message(Command("panel"))
 async def cmd_settings_panel(message: types.Message):
     user_id = message.from_user.id
     await message.answer(build_settings_panel(user_id), parse_mode=None, reply_markup=get_settings_keyboard(user_id))
+
+
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    help_text = "📋 USERBOT BUYRUQLAR RO'YXATI\n\n"
+    for cmd, (title, desc) in USERBOT_COMMANDS.items():
+        help_text += f"{title}\n  Buyruq: {cmd}\n  {desc}\n\n"
+    help_text += "Har qanday buyruqni yozishda xato bo'lsa, bot to'g'ri foydalanishni ko'rsatadi."
+    await message.answer(help_text, parse_mode=None)
 
 
 @router.message(Command("connections"))

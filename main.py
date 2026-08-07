@@ -3,7 +3,7 @@ import logging
 import sys
 import os
 from aiohttp import web
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
@@ -106,11 +106,28 @@ async def main():
     dp = Dispatcher()
 
     dp.message.middleware(RateLimitMiddleware(limit=settings.rate_limit_seconds))
-    dp.business_message.middleware(RateLimitMiddleware(limit=settings.rate_limit_seconds))
+    # NOTE: no rate-limit middleware on business_message — it silently dropped
+    # owner commands and customer messages. Commands always work; the auto-reply
+    # has its own per-chat cooldown in the handler.
 
     dp.include_router(commands.router)
     dp.include_router(business_connection.router)
     dp.include_router(business_message.router)
+
+    # Telegram "MENU" button — easy access to the admin panel without inline keys
+    try:
+        await bot.set_my_commands([
+            types.BotCommand(command="start", description="🏠 Boshqaruv paneli"),
+            types.BotCommand(command="settings", description="⚙️ Bot sozlamalari"),
+            types.BotCommand(command="connections", description="📋 Ulangan akkuntlar"),
+            types.BotCommand(command="approve", description="✅ Akkuntni tasdiqlash"),
+            types.BotCommand(command="disapprove", description="❌ Akkuntni rad etish"),
+            types.BotCommand(command="reset", description="🗑 Tarixni tozalash"),
+            types.BotCommand(command="help", description="📖 Yordam"),
+        ])
+        logger.info("Bot command menu (MENU button) registered.")
+    except Exception as e:
+        logger.warning(f"set_my_commands failed: {e}")
 
     # Launch Uzbekistan auto-clock background task
     asyncio.create_task(update_clock_task(bot))

@@ -26,7 +26,7 @@ import aiohttp
 from aiogram import Bot, types
 from aiogram.enums import ChatAction
 
-from storage import get_conn_settings, set_conn_setting
+from storage import get_conn_settings, set_conn_setting, set_chat_model
 
 logger = logging.getLogger(__name__)
 
@@ -507,6 +507,43 @@ def owner_nickname(conn) -> str:
 AI_SYSTEM_PROMPT = "Siz aqlli va foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblaringiz qisqa va tushunarli bo'lsin."
 
 
+async def ask_deepseek(query: str, system_prompt: str = AI_SYSTEM_PROMPT) -> str:
+    """Ask DeepSeek (zecora0 endpoint) and return the answer text. Raises on failure."""
+    status, data = await http_post_json(
+        "https://zecora0.serv00.net/deepseek.php",
+        data={"model": "2", "message": f"{system_prompt}\n\nSavol: {query}"},
+        timeout=45,
+    )
+    if status != 200 or not (isinstance(data, dict) and data.get("success")):
+        err = data.get("error", "Noma'lum xato") if isinstance(data, dict) else data
+        raise Exception(f"DeepSeek xatosi: {err}")
+    answer = str(data.get("response") or "").strip()
+    if not answer:
+        raise Exception("DeepSeek bo'sh javob qaytardi")
+    return answer
+
+
+async def cmd_model(bot, message, conn_id, args):
+    """Pin the AI model for THIS chat: .model claude|grok|deepseek"""
+    model = args.strip().lower().split()[0] if args.strip() else ""
+    if model not in ("claude", "grok", "gpt", "deepseek"):
+        await send_text(
+            bot, message, conn_id,
+            f"{ERROR} <b>Model tanlang!</b>\n\n"
+            f"📝 <b>Namuna:</b> <code>.model claude</code>\n"
+            f"🌐 <b>Modellar:</b> <code>claude</code> | <code>grok</code> | <code>gpt</code> | <code>deepseek</code>\n\n"
+            f"ℹ️ Bu chat uchun model pinlanadi — boshqa model javob bermaydi."
+        )
+        return
+    set_chat_model(conn_id, message.chat.id, model)
+    names = {"claude": "🧠 Claude 4.5", "grok": "🌌 Grok 4.3", "gpt": "🤖 GPT 4o", "deepseek": "🤖 DeepSeek"}
+    await send_text(
+        bot, message, conn_id,
+        f"{CHECK} <b>Model o'zgartirildi!</b>\n\n"
+        f"Bu chatda endi <b>{names[model]}</b> javob beradi."
+    )
+
+
 async def cmd_ai(bot, message, conn_id, args):
     query = args.strip()
     if not query and message.reply_to_message and message.reply_to_message.text:
@@ -520,22 +557,15 @@ async def cmd_ai(bot, message, conn_id, args):
         return
     await send_typing(bot, message, conn_id)
     try:
-        status, data = await http_post_json(
-            "https://zecora0.serv00.net/deepseek.php",
-            data={"model": "2", "message": f"{AI_SYSTEM_PROMPT}\n\nSavol: {query}"},
-            timeout=60,
+        answer = await asyncio.wait_for(
+            ask_deepseek(query, AI_SYSTEM_PROMPT), timeout=50
         )
-        if status == 200 and isinstance(data, dict) and data.get("success"):
-            answer = str(data.get("response") or "").strip()
-            if answer:
-                if len(answer) > 4000:
-                    answer = answer[:4000] + "..."
-                await send_text(bot, message, conn_id, answer)
-            else:
-                await send_text(bot, message, conn_id, f"{ERROR} <b>AI bo'sh javob qaytardi.</b>")
-        else:
-            err = data.get("error", "Noma'lum xato") if isinstance(data, dict) else data
-            await send_text(bot, message, conn_id, f"{ERROR} <b>AI xatosi:</b> <code>{err}</code>")
+        if len(answer) > 4000:
+            answer = answer[:4000] + "..."
+        await send_text(bot, message, conn_id, answer)
+        set_chat_model(conn_id, message.chat.id, "deepseek")
+    except asyncio.TimeoutError:
+        await send_text(bot, message, conn_id, f"{ERROR} <b>AI javob berishda kechikdi. Qayta urinib ko'ring.</b>")
     except Exception as e:
         await send_text(bot, message, conn_id, f"{ERROR} <b>Xato:</b> <code>{e}</code>")
 
@@ -558,15 +588,58 @@ async def cmd_grok(bot, message, conn_id, args):
     await send_typing(bot, message, conn_id)
     try:
         from services.grok_service import grok_service
-        reply = await grok_service.generate_response(
-            contents=[query],
-            system_prompt="Siz foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblaringiz qisqa va tushunarli bo'lsin.",
+        reply = await asyncio.wait_for(
+            grok_service.generate_response(
+                contents=[query],
+                system_prompt="Siz foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblaringiz qisqa va tushunarli bo'lsin.",
+            ),
+            timeout=45,
         )
         if len(reply) > 4000:
             reply = reply[:4000] + "..."
         await send_text(bot, message, conn_id, reply)
+        set_chat_model(conn_id, message.chat.id, "grok")
+    except asyncio.TimeoutError:
+        await send_text(bot, message, conn_id, f"{ERROR} <b>Grok javob berishda kechikdi. Qayta urinib ko'ring.</b>")
     except Exception as e:
         await send_text(bot, message, conn_id, f"{ERROR} <b>Grok xatosi:</b> <code>{e}</code>")
+
+
+# ─────────────────────────────────────────────────────────────
+# GPT AI  (.gpt <savol> / reply) — KILWA kilwa-chatgpt
+# ─────────────────────────────────────────────────────────────
+
+async def cmd_gpt(bot, message, conn_id, args):
+    query = args.strip()
+    if not query and message.reply_to_message and message.reply_to_message.text:
+        query = message.reply_to_message.text.strip()
+    if not query:
+        await send_text(
+            bot, message, conn_id,
+            f"{ERROR} <b>GPT ga savol bering!</b>\n\n"
+            f"📝 <b>Namuna:</b> <code>.gpt Python nima?</code> yoki reply qilib <code>.gpt</code>"
+        )
+        return
+    await send_typing(bot, message, conn_id)
+    try:
+        from services.claude_service import claude_service
+        reply = await asyncio.wait_for(
+            claude_service.generate_response(
+                contents=[query],
+                system_prompt="Siz foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblaringiz qisqa va tushunarli bo'lsin.",
+                model="gpt",
+                retries=2,
+            ),
+            timeout=45,
+        )
+        if len(reply) > 4000:
+            reply = reply[:4000] + "..."
+        await send_text(bot, message, conn_id, reply)
+        set_chat_model(conn_id, message.chat.id, "gpt")
+    except asyncio.TimeoutError:
+        await send_text(bot, message, conn_id, f"{ERROR} <b>GPT javob berishda kechikdi. Qayta urinib ko'ring.</b>")
+    except Exception as e:
+        await send_text(bot, message, conn_id, f"{ERROR} <b>GPT xatosi:</b> <code>{e}</code>")
 
 
 # ─────────────────────────────────────────────────────────────

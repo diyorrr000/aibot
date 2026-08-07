@@ -9,11 +9,13 @@ logger = logging.getLogger(__name__)
 API_URLS = {
     "claude": "http://de3.bot-hosting.net:21007/kilwa-claude",
     "grok": "http://de3.bot-hosting.net:21007/kilwa-grok",
+    "gpt": "http://de3.bot-hosting.net:21007/kilwa-chatgpt",
 }
 
 MODEL_NAMES = {
     "claude": "🧠 Claude Haiku 4.5 (KILWA)",
     "grok": "🌌 Grok 4.3 (KILWA)",
+    "gpt": "🤖 GPT 4o (KILWA)",
 }
 
 
@@ -77,7 +79,7 @@ class KilwaAIService:
                     async with session.get(
                         api_url,
                         params={"text": full_prompt},
-                        timeout=aiohttp.ClientTimeout(total=30),
+                        timeout=aiohttp.ClientTimeout(total=25),
                     ) as resp:
                         if resp.status != 200:
                             raise Exception(f"API returned status {resp.status}")
