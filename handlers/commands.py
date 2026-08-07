@@ -34,7 +34,7 @@ USERBOT_COMMANDS = {
     ".ai":         ("🤖 AI savol", "DeepSeek AI. Misol: .ai Uzbekiston poytaxti qaysi?"),
     ".grok":       ("🌌 Grok AI", "Grok modeli. Misol: .grok kelajak haqida ayt"),
     ".gpt":        ("🤖 GPT AI", "GPT modeli. Misol: .gpt Python nima?"),
-    ".model":      ("🎛 AI Model", "Bu chat uchun model pinlash. Misol: .model claude|grok|gpt|deepseek"),
+    ".model":      ("🎛 AI Model", "Bu chat uchun model pinlash. Misol: .model claude|grok|gpt"),
     ".tr":         ("🌐 Tarjima", "Xabarni tarjima qiladi. Misol: .tr ru Hello world"),
     ".tts":        ("🗣 Ovozli xabar", "Matnni ovozga aylantiradi. Misol: .tts Salom"),
     ".co":         ("💫 Buyruqlar", "Barcha animatsiya va modullar ro'yxati."),

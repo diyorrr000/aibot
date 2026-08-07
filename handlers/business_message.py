@@ -62,7 +62,7 @@ COMMAND_HELP = {
     ".ai":         "🤖 AI: .ai [savol] — Misol: .ai Toshkent qayerda?",
     ".grok":       "🌌 Grok: .grok [savol] — Misol: .grok kelajak haqida ayt",
     ".gpt":        "🤖 GPT: .gpt [savol] — Misol: .gpt massiv nima?",
-    ".model":      "🎛 Model: .model claude|grok|gpt|deepseek — Bu chat uchun AI modelni pinlash",
+    ".model":      "🎛 Model: .model claude|grok|gpt — Bu chat uchun AI modelni pinlash",
     ".tr":         "🌐 Tarjima: .tr [til] [matn] — Misol: .tr en Salom dunyo",
     ".tts":        "🗣 Ovoz: .tts [matn] — Misol: .tts Assalomu alaykum",
     ".co":         "💫 Buyruqlar/Animatsiyalar: .co",
@@ -103,10 +103,10 @@ COMMAND_HELP = {
 HELP_TEXT = """📋 USERBOT BUYRUQLAR RO'YXATI
 
 🤖 AI
-  .ai [savol] — DeepSeek AI bilan gaplashing
+  .ai [savol] — AI bilan gaplashing
   .grok [savol] — Grok AI bilan gaplashing
   .gpt [savol] — GPT AI bilan gaplashing
-  .model claude|grok|gpt|deepseek — Bu chat uchun AI modelni pinlash
+  .model claude|grok|gpt — Bu chat uchun AI modelni pinlash
 
 🌐 Tarjima va Ovoz
   .tr [til] [matn] — Tarjima (en, ru, uz, ar...)
@@ -315,7 +315,7 @@ async def _generate_auto_reply(contents, sys_prompt, preferred_model):
     service is down or slow (the previous version went silent on a timeout)."""
     chain = []
     preferred = (preferred_model or "claude").lower()
-    first = preferred if preferred in ("claude", "gpt", "grok", "deepseek") else "claude"
+    first = preferred if preferred in ("claude", "gpt", "grok") else "claude"
     chain.append(first)
     for m in ("claude", "gpt", "grok"):
         if m != first:
@@ -323,23 +323,16 @@ async def _generate_auto_reply(contents, sys_prompt, preferred_model):
 
     for model in chain:
         try:
-            if model == "deepseek":
-                text_parts = [p for p in contents if isinstance(p, str)]
-                full_query = "\n".join(text_parts) if text_parts else "Salom!"
-                reply = await asyncio.wait_for(
-                    ua.ask_deepseek(full_query, sys_prompt), timeout=30
-                )
-            else:
-                reply = await asyncio.wait_for(
-                    claude_service.generate_response(
-                        contents=contents,
-                        system_prompt=sys_prompt,
-                        model=model,
-                        retries=1,
-                        timeout=15,
-                    ),
-                    timeout=25,
-                )
+            reply = await asyncio.wait_for(
+                claude_service.generate_response(
+                    contents=contents,
+                    system_prompt=sys_prompt,
+                    model=model,
+                    retries=1,
+                    timeout=15,
+                ),
+                timeout=25,
+            )
             if reply and reply.strip():
                 logger.info(f"Auto-reply answered with model={model}")
                 return reply
@@ -597,25 +590,33 @@ async def handle_business_message(message: types.Message, bot: Bot):
     else:
         sys_prompt = (
             f"Sen {owner_handle} ning shaxsiy yordamchisisan. "
-            f"Vazifang: kelgan xabarlarga o'zbek tilida javob berish. "
-            f"Qoidalar: faqat o'zbek tilida yoz, o'zingni 'shaxsiy yordamchiman' deb tanishtir, "
-            f"hech qachon Anthropic, Claude yoki AI ekanligingni aytma. "
-            f"Javoblar qisqa va tabiiy bo'lsin."
+            f"Vazifang: kelgan murojaatlarga o'zbek tilida javob berish. "
+            f"QOIDALAR:\n"
+            f"1. Faqat o'zbek tilida yoz; o'zingni 'shaxsiy yordamchiman' deb tanishtir. "
+            f"Hech qachon Anthropic, Claude yoki AI ekanligingni aytma.\n"
+            f"2. HAR XABARDA SALOM BERMA! Faqat kun davomidagi birinchi murojaatga "
+            f"bitta qisqa salom bilan boshlash mumkin, keyingi xabarlarga esa "
+            f"to'g'ridan-to'g'ri mazmunga qarab javob ber.\n"
+            f"3. Javoblar to'liq, batafsil va foydali bo'lsin. Bir xil so'z yoki "
+            f"iboralarni takrorlamaslikka harakat qil; har gal yangi, aniq va "
+            f"to'liq javob yoz, faqat bitta jumla bilan cheklanma.\n"
+            f"4. Savol noaniq bo'lsa, yo'naltiruvchi qisqa savol berib aniqlashtir."
         )
 
     # Once-a-day greeting: greet the customer on their first message of the day,
     # then simply continue the conversation without re-greeting.
     if first_msg_today:
         sys_prompt += (
-            f"\n\nQo'shimcha: bugun bu mijoz bilan suhbat endi boshlandi. "
-            f"Javobni qisqagina salom (masalan 'Assalomu alaykum!') bilan boshlab, "
-            f"so'ng murojaatiga javob ber."
+            f"\n\nQo'shimcha: bugun bu mijozning kun davomidagi BIRINCHI murojaati. "
+            f"Javobni bitta qisqa salom bilan boshlash mumkin "
+            f"(masalan 'Assalomu alaykum! Qanday yordam kerak?'), so'ng murojaatiga "
+            f"to'liq javob ber. Keyingi xabarlarda salomni takrorlama."
         )
     else:
         sys_prompt += (
             f"\n\nQo'shimcha: bugun bu chatda allaqachon salomlashilgan. "
-            f"QAYTA salom berma! To'g'ridan-to'g'ri suhbatni davom ettir — "
-            f"xuddi davom etayotgan muloqotdek javob ber."
+            f"HECH QANDAY salom berma — to'g'ridan-to'g'ri suhbatni davom ettir, "
+            f"xuddi davom etayotgan muloqotdek."
         )
 
     # Model: a chat pinned via .ai/.grok/.model keeps that model until switched.

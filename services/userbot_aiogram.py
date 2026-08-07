@@ -563,7 +563,7 @@ def owner_nickname(conn) -> str:
 # AI DEEPSEEK  (.ai <savol> / reply)
 # ─────────────────────────────────────────────────────────────
 
-AI_SYSTEM_PROMPT = "Siz aqlli va foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblaringiz qisqa va tushunarli bo'lsin."
+AI_SYSTEM_PROMPT = "Siz aqlli va foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblar batafsil, aniq va foydali bo'lsin; bir xil iboralarni takrorlamang va faqat salomlashish bilan cheklanmang."
 
 
 async def ask_deepseek(query: str, system_prompt: str = AI_SYSTEM_PROMPT) -> str:
@@ -583,19 +583,19 @@ async def ask_deepseek(query: str, system_prompt: str = AI_SYSTEM_PROMPT) -> str
 
 
 async def cmd_model(bot, message, conn_id, args):
-    """Pin the AI model for THIS chat: .model claude|grok|deepseek"""
+    """Pin the AI model for THIS chat: .model claude|grok|gpt"""
     model = args.strip().lower().split()[0] if args.strip() else ""
-    if model not in ("claude", "grok", "gpt", "deepseek"):
+    if model not in ("claude", "grok", "gpt"):
         await send_text(
             bot, message, conn_id,
             f"{ERROR} <b>Model tanlang!</b>\n\n"
             f"📝 <b>Namuna:</b> <code>.model claude</code>\n"
-            f"🌐 <b>Modellar:</b> <code>claude</code> | <code>grok</code> | <code>gpt</code> | <code>deepseek</code>\n\n"
+            f"🌐 <b>Modellar:</b> <code>claude</code> | <code>grok</code> | <code>gpt</code>\n\n"
             f"ℹ️ Bu chat uchun model pinlanadi — boshqa model javob bermaydi."
         )
         return
     set_chat_model(conn_id, message.chat.id, model)
-    names = {"claude": "🧠 Claude 4.5", "grok": "🌌 Grok 4.3", "gpt": "🤖 GPT 4o", "deepseek": "🤖 DeepSeek"}
+    names = {"claude": "🧠 Claude 4.5", "grok": "🌌 Grok 4.3", "gpt": "🤖 GPT 4o"}
     await send_text(
         bot, message, conn_id,
         f"{CHECK} <b>Model o'zgartirildi!</b>\n\n"
@@ -619,38 +619,28 @@ async def cmd_ai(bot, message, conn_id, args):
     used_model = None
     answer = None
 
-    # 1) DeepSeek
-    try:
-        answer = await asyncio.wait_for(
-            ask_deepseek(query, AI_SYSTEM_PROMPT), timeout=50
-        )
-        used_model = "deepseek"
-    except Exception:
-        answer = None
-
-    # 2) KILWA fallback zanjiri: qaysi model bo'sh bo'lsa o'sha javob beradi
-    if not answer:
-        from services.ai_service import claude_service
-        chain = [
-            ("claude", "Uzbekcha javob ber"),
-            ("gpt", AI_SYSTEM_PROMPT),
-            ("grok", AI_SYSTEM_PROMPT),
-        ]
-        for model, prompt in chain:
-            try:
-                gen = claude_service.generate_response(
-                    contents=[query],
-                    system_prompt=prompt,
-                    model=model,
-                    retries=1,
-                    timeout=25,
-                )
-                answer = await asyncio.wait_for(gen, timeout=30)
-                if answer:
-                    used_model = model
-                    break
-            except Exception:
-                continue
+    # KILWA fallback zanjiri: qaysi model bo'sh bo'lsa o'sha javob beradi
+    from services.ai_service import claude_service
+    chain = [
+        ("claude", "Uzbekcha javob ber"),
+        ("gpt", AI_SYSTEM_PROMPT),
+        ("grok", AI_SYSTEM_PROMPT),
+    ]
+    for model, prompt in chain:
+        try:
+            gen = claude_service.generate_response(
+                contents=[query],
+                system_prompt=prompt,
+                model=model,
+                retries=1,
+                timeout=25,
+            )
+            answer = await asyncio.wait_for(gen, timeout=30)
+            if answer:
+                used_model = model
+                break
+        except Exception:
+            continue
 
     if not answer:
         await send_text(
@@ -688,7 +678,7 @@ async def cmd_grok(bot, message, conn_id, args):
         reply = await asyncio.wait_for(
             grok_service.generate_response(
                 contents=[query],
-                system_prompt="Siz foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblaringiz qisqa va tushunarli bo'lsin.",
+                system_prompt="Siz foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblar batafsil, aniq va foydali bo'lsin; bir xil iboralarni takrorlamang va faqat salomlashish bilan cheklanmang.",
             ),
             timeout=45,
         )
@@ -723,7 +713,7 @@ async def cmd_gpt(bot, message, conn_id, args):
         reply = await asyncio.wait_for(
             claude_service.generate_response(
                 contents=[query],
-                system_prompt="Siz foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblaringiz qisqa va tushunarli bo'lsin.",
+                system_prompt="Siz foydali yordamchisiz. Har doim o'zbek tilida javob bering. Javoblar batafsil, aniq va foydali bo'lsin; bir xil iboralarni takrorlamang va faqat salomlashish bilan cheklanmang.",
                 model="gpt",
                 retries=2,
             ),
