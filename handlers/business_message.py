@@ -243,6 +243,21 @@ def _is_owner_message(message: types.Message, conn: dict) -> bool:
     return any(s.get("user_id") == uid for s in connection_settings.values())
 
 
+# Dedup: the same message can arrive as BOTH a "message" and a "business_message"
+# update. Without this, .help and other commands get sent multiple times.
+_last_cmd: dict = {}
+
+
+def _dedupe_command(chat_id: int, user_id: int, text: str) -> bool:
+    """True if this exact command was already handled in the last 3 seconds."""
+    key = (chat_id, user_id, text)
+    now = time.time()
+    if key in _last_cmd and now - _last_cmd[key] < 3.0:
+        return True
+    _last_cmd[key] = now
+    return False
+
+
 async def handle_owner_command(bot: Bot, message: types.Message, conn_id: str, cmd_word: str, args: str):
     """Run a single userbot command from the owner. Returns True if it was a command."""
     # Special commands
@@ -280,9 +295,9 @@ async def handle_owner_command(bot: Bot, message: types.Message, conn_id: str, c
             try:
                 await bot.send_message(
                     chat_id=message.chat.id,
-                    text=f"🚫 <b>'{cmd_word}' da xatolik yuz berdi:</b> <code>{e}</code>",
+                    text=f"🚫 '{cmd_word}' da xatolik yuz berdi: {e}",
                     business_connection_id=conn_id,
-                    parse_mode='HTML'
+                    parse_mode=None
                 )
             except Exception:
                 pass
@@ -301,20 +316,14 @@ async def handle_business_message(message: types.Message, bot: Bot):
     user_id = message.from_user.id if message.from_user else 0
     conn = get_conn_settings(conn_id)
 
-    # ── APPROVAL CHECK ──────────────────────────────────────
-    if not conn.get("is_approved"):
-        # Silently ignore — admin hasn't approved yet
-        return
-
-    if not conn.get("is_enabled") or not conn.get("can_reply", True):
-        return
-
     text = message.text.strip() if message.text else ""
     raw_text = (message.text or message.caption or "").strip()
 
     # ── OWNER MESSAGES ──────────────────────────────────────
     # The owner's OWN messages must NEVER be auto-replied —
     # the AI only writes back when a customer writes TO the owner.
+    # Owner commands ALWAYS work, even if the connection is not yet
+    # approved/enabled (approval only gates the customer auto-reply).
     if conn.get("user_id") and _is_owner_message(message, conn):
         # Owner saved media with .ok
         if text.lower() == ".ok" and message.reply_to_message:
@@ -325,6 +334,8 @@ async def handle_business_message(message: types.Message, bot: Bot):
 
         # Owner typed a .command — dispatch it
         if text.startswith(".") and len(text) > 1:
+            if _dedupe_command(chat_id, user_id, text):
+                return
             parts = text.split(maxsplit=1)
             cmd_word = parts[0].lower()
             args = parts[1] if len(parts) > 1 else ""
@@ -361,6 +372,14 @@ async def handle_business_message(message: types.Message, bot: Bot):
         return
 
     # ── CUSTOMER MESSAGE — AUTO REPLY ────────────────────────
+    # Approval / enabled check ONLY gates the auto-reply to customers.
+    if not conn.get("is_approved"):
+        # Silently ignore — admin hasn't approved yet
+        return
+
+    if not conn.get("is_enabled") or not conn.get("can_reply", True):
+        return
+
     # Never auto-reply to messages without a known sender (channel posts etc.)
     if user_id == 0:
         logger.info(f"Skipping sender-less message in chat {chat_id} (no AI reply)")

@@ -562,12 +562,12 @@ async def cmd_ai(bot, message, conn_id, args):
         )
         if len(answer) > 4000:
             answer = answer[:4000] + "..."
-        await send_text(bot, message, conn_id, answer)
+        await send_text(bot, message, conn_id, answer, parse_mode=None)
         set_chat_model(conn_id, message.chat.id, "deepseek")
     except asyncio.TimeoutError:
         await send_text(bot, message, conn_id, f"{ERROR} <b>AI javob berishda kechikdi. Qayta urinib ko'ring.</b>")
     except Exception as e:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Xato:</b> <code>{e}</code>")
+        await send_text(bot, message, conn_id, f"{ERROR} <b>Xato:</b> <code>{e}</code>", parse_mode=None)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -597,12 +597,12 @@ async def cmd_grok(bot, message, conn_id, args):
         )
         if len(reply) > 4000:
             reply = reply[:4000] + "..."
-        await send_text(bot, message, conn_id, reply)
+        await send_text(bot, message, conn_id, reply, parse_mode=None)
         set_chat_model(conn_id, message.chat.id, "grok")
     except asyncio.TimeoutError:
         await send_text(bot, message, conn_id, f"{ERROR} <b>Grok javob berishda kechikdi. Qayta urinib ko'ring.</b>")
     except Exception as e:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Grok xatosi:</b> <code>{e}</code>")
+        await send_text(bot, message, conn_id, f"{ERROR} <b>Grok xatosi:</b> <code>{e}</code>", parse_mode=None)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -634,12 +634,12 @@ async def cmd_gpt(bot, message, conn_id, args):
         )
         if len(reply) > 4000:
             reply = reply[:4000] + "..."
-        await send_text(bot, message, conn_id, reply)
+        await send_text(bot, message, conn_id, reply, parse_mode=None)
         set_chat_model(conn_id, message.chat.id, "gpt")
     except asyncio.TimeoutError:
         await send_text(bot, message, conn_id, f"{ERROR} <b>GPT javob berishda kechikdi. Qayta urinib ko'ring.</b>")
     except Exception as e:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>GPT xatosi:</b> <code>{e}</code>")
+        await send_text(bot, message, conn_id, f"{ERROR} <b>GPT xatosi:</b> <code>{e}</code>", parse_mode=None)
 
 
 # ─────────────────────────────────────────────────────────────

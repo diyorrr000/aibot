@@ -435,13 +435,19 @@ async def handle_private_message(message: types.Message, bot: Bot):
             await message.reply("❌ Mediani saqlashda xatolik.")
         return
 
-    # .help — userbot buyruqlar ro'yxati (ulangan chatlarda ham ishlaydi)
-    if text.lower() == ".help":
-        help_text = "📋 USERBOT BUYRUQLAR RO'YXATI\n\n"
-        for cmd, (title, desc) in USERBOT_COMMANDS.items():
-            help_text += f"{title}\n  Buyruq: {cmd}\n  {desc}\n\n"
-        help_text += "Har qanday buyruqni yozishda xato bo'lsa, bot to'g'ri foydalanishni ko'rsatadi."
-        await message.answer(help_text, parse_mode=None)
+    # Userbot buyruqlari shaxsiy chatda ham ishlaydi (hohlagan joyda)
+    if text.startswith(".") and len(text) > 1:
+        from handlers.business_message import handle_owner_command, _dedupe_command
+        if _dedupe_command(message.chat.id, message.from_user.id, text):
+            return
+        parts = text.split(maxsplit=1)
+        cmd_word = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+        if cmd_word == ".ok":
+            return  # .ok reply'siz — hech narsa qilmaydi
+        handled = await handle_owner_command(bot, message, None, cmd_word, args)
+        if not handled:
+            await message.answer("❓ Noma'lum buyruq.\n\nBarcha buyruqlar: .help", parse_mode=None)
         return
 
     # Typing indicator
