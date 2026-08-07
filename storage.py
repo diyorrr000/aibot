@@ -140,6 +140,14 @@ def set_conn_setting(connection_id: str, **kwargs):
     connection_settings[connection_id] = s
     _save_json(CONNECTIONS_FILE, connection_settings)
 
+def clear_other_connections(keep_conn_id: str):
+    """Remove every connection except keep_conn_id — only the newest is kept."""
+    stale = [cid for cid in connection_settings.keys() if cid != keep_conn_id]
+    for cid in stale:
+        connection_settings.pop(cid, None)
+    if stale:
+        _save_json(CONNECTIONS_FILE, connection_settings)
+
 _load_persisted()
 
 # Userbot modules toggle state: user_id -> {"module_name": bool}

@@ -1,6 +1,6 @@
 import logging
 from aiogram import Router, types, Bot
-from storage import get_conn_settings, set_conn_setting, ADMIN_ID
+from storage import get_conn_settings, set_conn_setting, clear_other_connections, ADMIN_ID
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -22,6 +22,11 @@ async def handle_business_connection(business_connection: types.BusinessConnecti
     # Only the admin's own business account is served. Other accounts are
     # stored but never activated, so the bot can't be used by anyone else.
     is_admin_conn = (user_id == ADMIN_ID)
+
+    # Only the NEWEST connection is kept — old/stale connections are deleted.
+    if is_admin_conn:
+        clear_other_connections(conn_id)
+
     set_conn_setting(
         conn_id,
         user_id=user_id,
