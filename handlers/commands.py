@@ -450,6 +450,43 @@ async def handle_private_message(message: types.Message, bot: Bot):
             await message.answer("❓ Noma'lum buyruq.\n\nBarcha buyruqlar: .help", parse_mode=None)
         return
 
+
+# ─────────────────────────────────────────────────────────
+# GROUP / SUPERGROUP MESSAGES
+# Userbot buyruqlari HAMMA chatda ishlashi uchun: guruh xabarlari
+# business_message sifatida kelmasa ham (bot guruh a'zosi bo'lsa),
+# ownerning .buyruq xabarlari shu yerda qabul qilinadi.
+# ─────────────────────────────────────────────────────────
+@router.message(F.chat.type.in_({"group", "supergroup"}))
+async def handle_group_message(message: types.Message, bot: Bot):
+    text = message.text.strip() if message.text else ""
+    if not (text.startswith(".") and len(text) > 1):
+        return
+
+    user_id = message.from_user.id if message.from_user else 0
+    if not user_id:
+        return
+
+    # Faqat business akkount egasi uchun ishlaydi
+    conn_id, conn = find_user_connection(user_id)
+    if not conn:
+        return
+
+    from handlers.business_message import handle_owner_command, _dedupe_command
+    if _dedupe_command(message.chat.id, user_id, text):
+        return
+
+    parts = text.split(maxsplit=1)
+    cmd_word = parts[0].lower()
+    args = parts[1] if len(parts) > 1 else ""
+
+    if cmd_word == ".ok":
+        return
+
+    handled = await handle_owner_command(bot, message, conn_id, cmd_word, args)
+    if not handled:
+        await message.answer("❓ Noma'lum buyruq.\n\nBarcha buyruqlar: .help", parse_mode=None)
+
     # Typing indicator
     try:
         await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
