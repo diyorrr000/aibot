@@ -148,6 +148,11 @@ def clear_other_connections(keep_conn_id: str):
     if stale:
         _save_json(CONNECTIONS_FILE, connection_settings)
 
+def clear_all_connections():
+    """Delete every stored business connection."""
+    connection_settings.clear()
+    _save_json(CONNECTIONS_FILE, connection_settings)
+
 _load_persisted()
 
 # Userbot modules toggle state: user_id -> {"module_name": bool}

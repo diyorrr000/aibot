@@ -9,6 +9,7 @@ from storage import (
     get_conn_settings,
     set_conn_setting,
     clear_history,
+    clear_all_connections,
     connection_settings,
     is_clock_enabled,
     set_clock_enabled,
@@ -166,6 +167,12 @@ def get_settings_keyboard(user_id: int):
         InlineKeyboardButton(text="🗑 Tarixni tozalash", callback_data="clear_chat_history"),
         InlineKeyboardButton(text="🔄 Yangilash", callback_data="refresh_panel"),
     ])
+
+    # Admin: wipe every stored connection with one tap
+    if is_admin:
+        keyboard.append([
+            InlineKeyboardButton(text="🗑 Barcha ulanishlarni o'chirish", callback_data="clear_all_connections")
+        ])
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -415,6 +422,19 @@ async def cb_refresh_panel(callback: types.CallbackQuery):
     await callback.answer("Yangilandi! 🔄")
     try:
         await callback.message.edit_text(build_settings_panel(user_id), parse_mode=None, reply_markup=get_settings_keyboard(user_id))
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "clear_all_connections")
+async def cb_clear_all_connections(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Faqat admin!", show_alert=True)
+        return
+    clear_all_connections()
+    await callback.answer("🗑 Barcha ulanishlar o'chirildi!", show_alert=True)
+    try:
+        await callback.message.edit_text(build_settings_panel(ADMIN_ID), parse_mode=None, reply_markup=get_settings_keyboard(ADMIN_ID))
     except Exception:
         pass
 
