@@ -54,7 +54,7 @@ USERBOT_COMMANDS = {
     ".do":         ("🌀 RolePlay .do", "Atrofdagi voqea. Misol: .do Quyosh chiqdi"),
     ".try":        ("🌀 RolePlay .try", "Omadingizni sinash. Misol: .try moshina"),
     ".todo":       ("🌀 RolePlay .todo", "Fraza va harakat. Misol: .todo Salom. qo'l silkitib"),
-    ".acc":        ("👤 Akkunt", "Akkunt haqida ma'lumot. Misol: .acc 123456789"),
+    ".acc":        ("👤 Akkunt", "Reply yoki username/ID orqali akkunt ma'lumoti. Misol: .acc @username yoki .acc 123456789"),
     ".status":     ("🖥 Server holati", "Server xotira/CPU holati."),
     ".getid":      ("🔖 Emoji ID", "Premium emoji ID olish (reply qiling)."),
     ".time":       ("🎄 Timer", "Voqegacha qolgan vaqtni ko'rsatadi."),

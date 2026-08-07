@@ -274,21 +274,46 @@ async def cmd_gender(bot, message, conn_id, args):
         return
     name = name.lstrip("@")
     await send_typing(bot, message, conn_id)
+
+    gtext = None
+    # 1) genderize.io — birinchi urinish
     try:
         result = await http_get_json("https://api.genderize.io", name=name)
         g = result.get("gender")
-        if g == "female":
-            emoji, gtext = "❤️🔥", "Ayol"
-        elif g == "male":
-            emoji, gtext = "🖤", "Erkak"
-        else:
-            emoji, gtext = "🩵", "Noma'lum"
-        await send_text(
-            bot, message, conn_id,
-            f"{CHECK} <b>Taxminiy jins: {name}</b>\n\n{emoji} <b>Jinsi:</b> <code>{gtext}</code>"
-        )
+        if g in ("female", "male"):
+            gtext = "Ayol" if g == "female" else "Erkak"
     except Exception as e:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Xatolik:</b> <code>{e}</code>")
+        logger.warning(f"genderize.io failed for '{name}': {e}")
+
+    # 2) KILWA AI — genderize.io ishlamasa
+    if gtext is None:
+        try:
+            from services.ai_service import claude_service
+            gen = claude_service.generate_response(
+                contents=[f"Ism: {name}\n\nBu ism egasining jinsini taxmin qil. Faqat bitta so'z bilan javob ber: Erkak, Ayol yoki Noma'lum."],
+                system_prompt="Siz ism orqali jins taxmin qiluvchi yordamchisiz. Faqat bitta so'z javob qaytaring.",
+                model="claude",
+                retries=1,
+                timeout=20,
+            )
+            reply = await asyncio.wait_for(gen, timeout=25)
+            if reply:
+                r = reply.strip().lower()
+                if any(w in r for w in ("ayol", "qiz", "female")):
+                    gtext = "Ayol"
+                elif any(w in r for w in ("erkak", "male", "o'g'il", "o`g`il")):
+                    gtext = "Erkak"
+                else:
+                    gtext = "Noma'lum"
+        except Exception as e:
+            logger.warning(f"gender AI fallback failed for '{name}': {e}")
+            gtext = "Noma'lum"
+
+    emoji = {"Ayol": "❤️🔥", "Erkak": "🖤"}.get(gtext, "🩵")
+    await send_text(
+        bot, message, conn_id,
+        f"{CHECK} <b>Taxminiy jins: {name}</b>\n\n{emoji} <b>Jinsi:</b> <code>{gtext}</code>"
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1073,17 +1098,46 @@ async def cmd_acc(bot, message, conn_id, args):
     reply = message.reply_to_message
     target_id = None
     name = "Akkunt"
+    extra = None
     if reply and reply.from_user:
+        # Reply qilingan odamning akkunti
         target_id = reply.from_user.id
         name = reply.from_user.first_name or "Foydalanuvchi"
-    elif args.strip().isdigit():
-        target_id = int(args.strip())
+        if reply.from_user.username:
+            extra = f"@{reply.from_user.username}"
+    elif args.strip():
+        raw = args.strip()
+        if raw.lstrip("+-").isdigit():
+            target_id = int(raw)
+        else:
+            # Username yoki @username → ID ni topishga harakat qilamiz
+            username = raw.lstrip("@")
+            try:
+                chat = await bot.get_chat(f"@{username}")
+                if chat.type != "private":
+                    await send_text(bot, message, conn_id, f"{ERROR} <b>'{raw}' guruh yoki kanal — shaxsiy akkunt emas.</b>")
+                    return
+                target_id = chat.id
+                name = chat.first_name or username
+                if chat.username:
+                    extra = f"@{chat.username}"
+            except Exception as e:
+                logger.warning(f"Could not resolve username '{raw}' for .acc: {e}")
+                await send_text(
+                    bot, message, conn_id,
+                    f"{ERROR} <b>'{raw}' topilmadi.</b>\n"
+                    f"Bot bu foydalanuvchini bilmaydi yoki username noto'g'ri.\n"
+                    f"Xabarga reply qiling yoki raqamli ID bilan urinib ko'ring."
+                )
+                return
     else:
         conn = get_conn_settings(conn_id)
         target_id = conn.get("user_id")
         name = owner_nickname(conn)
+        if conn.get("username"):
+            extra = conn["username"]
     if not target_id:
-        await send_text(bot, message, conn_id, f"{ERROR} <b>Foydalanuvchi ID sini kiriting yoki xabarga reply qiling!</b>")
+        await send_text(bot, message, conn_id, f"{ERROR} <b>Foydalanuvchi ID/username kiriting yoki xabarga reply qiling!</b>")
         return
     await send_typing(bot, message, conn_id)
     try:
@@ -1091,8 +1145,10 @@ async def cmd_acc(bot, message, conn_id, args):
         reg_time = _estimate_registration(target_id)
         reg_date = datetime.fromtimestamp(reg_time, tz=timezone.utc).strftime("%d.%m.%Y")
         age_str = _calc_age(reg_date)
-        text = (
-            f"✅ <b>{name} haqida ma'lumot</b>:\n\n"
+        text = f"✅ <b>{name} haqida ma'lumot</b>:\n\n"
+        if extra:
+            text += f"👤 <b>Username:</b> <code>{extra}</code>\n"
+        text += (
             f"💎 <b>ID:</b> <code>{target_id}</code>\n"
             f"✈️ <b>Data-center:</b> <code>{dc_id}</code>\n"
             f"✅ <b>Ochilgan sana:</b> <code>{reg_date}</code>\n"

@@ -83,7 +83,7 @@ COMMAND_HELP = {
     ".do":         "🌀 RolePlay: .do [voqea]",
     ".try":        "🌀 RolePlay: .try [harakat]",
     ".todo":       "🌀 RolePlay: .todo [fraza] [harakat]",
-    ".acc":        "👤 Akkunt: .acc [id] — akkunt haqida ma'lumot",
+    ".acc":        "👤 Akkunt: .acc [@username|id] yoki reply — akkunt haqida ma'lumot",
     ".status":     "🖥 Server holati: .status",
     ".getid":      "🔖 Emoji ID: .getid — premium emojiga reply qiling",
     ".time":       "🎄 Timer: .time — voqegacha qolgan vaqt",
