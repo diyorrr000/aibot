@@ -62,7 +62,7 @@ async def update_clock_task(bot: Bot):
                 if clock_on:
                     fn = conn.get("orig_first_name") or conn.get("first_name") or "User"
                     ln = (conn.get("orig_last_name") or conn.get("last_name") or "").strip()
-                    new_last = f"{ln} | 🕒 {to_bold_time(now_raw)}".strip(" |")
+                    new_last = f"{ln} | {to_bold_time(now_raw)}".strip(" |")
                     try:
                         await bot.set_business_account_name(
                             business_connection_id=conn_id,
