@@ -1387,7 +1387,8 @@ async def cmd_soatbio(bot, message, conn_id, args):
         set_conn_setting(conn_id, clock_bio=True)
         try:
             if hasattr(bot, "set_business_account_bio"):
-                bio = f"🕒 Soat: {datetime.now(UZB_TZ).strftime('%H:%M')} | 📅 Sana: {datetime.now(UZB_TZ).strftime('%d.%m.%Y')}"
+                from storage import to_bold_time
+                bio = f"🕒 Soat: {to_bold_time(datetime.now(UZB_TZ).strftime('%H:%M'))} | 📅 Sana: {datetime.now(UZB_TZ).strftime('%d.%m.%Y')}"
                 await bot.set_business_account_bio(business_connection_id=conn_id, bio=bio)
         except Exception:
             pass

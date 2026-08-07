@@ -49,6 +49,9 @@ VALID_COMMANDS = [
     ".auto", ".stopauto",
 ]
 
+# Every defined animation is a valid command (e.g. .love, .snow, .xd, ...)
+VALID_COMMANDS.extend(f".{name}" for name in ANIMATIONS)
+
 COMMAND_HELP = {
     ".help":       "📋 Buyruqlar ro'yxati: shunchaki .help yozing.",
     ".ping":       "🏓 Ping: .ping — bot javob beradi.",

@@ -10,6 +10,16 @@ from config import settings
 # Strict Admin ID
 ADMIN_ID = 7306854093
 
+# Unicode bold digits for the profile clock (.soat) — names can't use markdown
+BOLD_DIGITS = {
+    '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒',
+    '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗',
+    ':': ':', ' ': ' ',
+}
+
+def to_bold_time(time_str: str) -> str:
+    return "".join(BOLD_DIGITS.get(c, c) for c in time_str)
+
 # chat_id -> list of {"role": "user"/"assistant", "content": ...}
 chat_histories: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
 

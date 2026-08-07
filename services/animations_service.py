@@ -30,6 +30,8 @@ ANIMATIONS = {
     "money": ["🔥                                 💵", "🔥                 💵", "🔥 💵", "💸"],
     "search": ["👽                     🔦😼", "👽          🔦😼", "👽🔦🙀"],
     "dance": ["🏡 💃", "🏡      💃", "🏡              💔👫", "🏡🚶‍♀"],
+    "yurak": ["💗", "💓", "💖", "❤️", "💘", "💝", "💕"],
+    "fuck": ["🤬", "😡", "🤬", "💢", "🤬", "💢💢", "🖕"],
 }
 
 # Delays for each animation
@@ -37,7 +39,7 @@ ANIM_DELAYS = {
     "love": 0.3, "xd": 0.3, "snow": 0.3, "police": 0.3, "kill": 0.3, "ari": 0.3,
     "load": 0.3, "god": 0.3, "snake": 0.3, "ghost": 0.1, "cosmo": 0.1, "knife": 0.2,
     "chaqmoq": 0.3, "home": 0.2, "ayriliq": 0.4, "puq": 0.3, "money": 0.1, "search": 0.1,
-    "dance": 0.2
+    "dance": 0.2, "yurak": 0.3, "fuck": 0.3
 }
 
 async def run_aiogram_animation(bot: Bot, chat_id: int, anim_name: str, conn_id: str = None):

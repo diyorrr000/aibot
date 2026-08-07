@@ -33,16 +33,7 @@ async def start_health_server():
     logger.info(f"Health check server running on port {port}")
 
 from datetime import datetime, timezone, timedelta
-from storage import is_clock_enabled, connection_settings
-
-BOLD_DIGITS = {
-    '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒',
-    '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗',
-    ':': ':'
-}
-
-def to_bold_time(time_str: str) -> str:
-    return "".join(BOLD_DIGITS.get(c, c) for c in time_str)
+from storage import is_clock_enabled, connection_settings, to_bold_time
 
 
 async def update_clock_task(bot: Bot):
@@ -70,18 +61,20 @@ async def update_clock_task(bot: Bot):
                 now_raw = datetime.now(uzb_tz).strftime("%H:%M")
                 if clock_on:
                     fn = conn.get("orig_first_name") or conn.get("first_name") or "User"
+                    ln = (conn.get("orig_last_name") or conn.get("last_name") or "").strip()
+                    new_last = f"{ln} | 🕒 {to_bold_time(now_raw)}".strip(" |")
                     try:
                         await bot.set_business_account_name(
                             business_connection_id=conn_id,
                             first_name=fn,
-                            last_name=to_bold_time(now_raw)
+                            last_name=new_last
                         )
                     except Exception as e:
                         logger.warning(f"Business name clock failed for {conn_id}: {e}")
                 if bio_on and hasattr(bot, "set_business_account_bio"):
                     try:
                         now_date = datetime.now(uzb_tz).strftime("%d.%m.%Y")
-                        bio = f"🕒 Soat: {now_raw} | 📅 Sana: {now_date}"
+                        bio = f"🕒 Soat: {to_bold_time(now_raw)} | 📅 Sana: {now_date}"
                         await bot.set_business_account_bio(business_connection_id=conn_id, bio=bio)
                     except Exception as e:
                         logger.warning(f"Business bio clock failed for {conn_id}: {e}")
