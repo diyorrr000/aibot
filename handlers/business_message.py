@@ -2,6 +2,7 @@ import asyncio
 import functools
 import logging
 import time
+from datetime import datetime
 from aiogram import Router, Bot, types
 from aiogram.enums import ChatAction
 
@@ -9,7 +10,10 @@ from services.claude_service import claude_service
 from services.media_service import media_service
 from services import userbot_aiogram as ua
 from services.animations_service import run_aiogram_animation, ANIMATIONS
-from storage import get_conn_settings, add_message, get_history, get_chat_model
+from storage import (
+    get_conn_settings, add_message, get_history, get_chat_model,
+    ADMIN_ID, get_greeting_date, set_greeting_date,
+)
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -235,15 +239,9 @@ def find_closest_command(text: str):
 
 
 def _is_owner_message(message: types.Message, conn: dict) -> bool:
-    """True if the message was sent by the business account owner (not a customer)."""
+    """Only the admin is treated as the account owner — nobody else is served."""
     uid = message.from_user.id if message.from_user else None
-    if not uid:
-        return False
-    if conn.get("user_id") == uid:
-        return True
-    # Fallback: the same user may own several connections — match any known owner id.
-    from storage import connection_settings
-    return any(s.get("user_id") == uid for s in connection_settings.values())
+    return uid == ADMIN_ID
 
 
 # Dedup: the same message can arrive as BOTH a "message" and a "business_message"
@@ -364,6 +362,12 @@ async def handle_business_message(message: types.Message, bot: Bot):
     user_id = message.from_user.id if message.from_user else 0
     conn = get_conn_settings(conn_id)
 
+    # The bot serves ONLY the admin's own business account. Any other connected
+    # account is completely ignored — no auto-replies, no commands.
+    if conn.get("user_id") != ADMIN_ID:
+        logger.info(f"Ignoring non-admin connection {conn_id} (only admin account works)")
+        return
+
     text = message.text.strip() if message.text else ""
     raw_text = (message.text or message.caption or "").strip()
 
@@ -373,14 +377,22 @@ async def handle_business_message(message: types.Message, bot: Bot):
     # Owner commands ALWAYS work, even if the connection is not yet
     # approved/enabled (approval only gates the customer auto-reply).
     if conn.get("user_id") and _is_owner_message(message, conn):
-        # Owner saved media with .ok
-        if text.lower() == ".ok" and message.reply_to_message:
-            success = await media_service.save_temporary_media(bot, message, conn["user_id"])
-            reply = "✅ Media saqlandi!" if success else "❌ Media yuklab bo'lmadi."
+        # Owner saved media with .ok — fully SILENT in the source chat: the
+        # command message is deleted and the content (media, voice, text, ...)
+        # is sent privately to the admin. Nothing is shown where .ok was used.
+        if text.lower() == ".ok":
             await _delete_owner_command(bot, conn_id, message)
-            await bot.send_message(
-                chat_id=chat_id, text=reply, business_connection_id=conn_id, parse_mode=None
-            )
+            if message.reply_to_message:
+                ok = await media_service.save_temporary_media(bot, message, ADMIN_ID)
+                if not ok:
+                    try:
+                        await bot.send_message(
+                            chat_id=ADMIN_ID,
+                            text="❌ Mediani saqlashda xatolik yuz berdi.",
+                            parse_mode=None
+                        )
+                    except Exception:
+                        pass
             return
 
         # Owner typed a .command — dispatch it
@@ -426,11 +438,7 @@ async def handle_business_message(message: types.Message, bot: Bot):
         return
 
     # ── CUSTOMER MESSAGE — AUTO REPLY ────────────────────────
-    # Approval / enabled check ONLY gates the auto-reply to customers.
-    if not conn.get("is_approved"):
-        # Silently ignore — admin hasn't approved yet
-        return
-
+    # No approval needed — the bot works immediately for the admin account.
     if not conn.get("is_enabled") or not conn.get("can_reply", True):
         return
 
@@ -450,6 +458,12 @@ async def handle_business_message(message: types.Message, bot: Bot):
     if chat_id in _last_ai_reply and now - _last_ai_reply[chat_id] < settings.rate_limit_seconds:
         logger.info(f"AI cooldown active in chat {chat_id} — skipping auto reply")
         return
+
+    # Greet only once per day, then keep the conversation going naturally.
+    today = datetime.now().strftime("%Y-%m-%d")
+    first_msg_today = get_greeting_date(chat_id) != today
+    if first_msg_today:
+        set_greeting_date(chat_id, today)
 
     # Typing indicator
     try:
@@ -509,6 +523,21 @@ async def handle_business_message(message: types.Message, bot: Bot):
             f"Qoidalar: faqat o'zbek tilida yoz, o'zingni 'shaxsiy yordamchiman' deb tanishtir, "
             f"hech qachon Anthropic, Claude yoki AI ekanligingni aytma. "
             f"Javoblar qisqa va tabiiy bo'lsin."
+        )
+
+    # Once-a-day greeting: greet the customer on their first message of the day,
+    # then simply continue the conversation without re-greeting.
+    if first_msg_today:
+        sys_prompt += (
+            f"\n\nQo'shimcha: bugun bu mijoz bilan suhbat endi boshlandi. "
+            f"Javobni qisqagina salom (masalan 'Assalomu alaykum!') bilan boshlab, "
+            f"so'ng murojaatiga javob ber."
+        )
+    else:
+        sys_prompt += (
+            f"\n\nQo'shimcha: bugun bu chatda allaqachon salomlashilgan. "
+            f"QAYTA salom berma! To'g'ridan-to'g'ri suhbatni davom ettir — "
+            f"xuddi davom etayotgan muloqotdek javob ber."
         )
 
     # Model: a chat pinned via .ai/.grok/.model keeps that model until switched.

@@ -118,80 +118,90 @@ class MediaService:
     @classmethod
     async def save_temporary_media(cls, bot: Bot, message: types.Message, target_chat_id: int) -> bool:
         """
-        Download temporary/view-once media and send to the target chat.
+        Save the replied-to message and send it to the target chat.
+
+        Handles EVERY content type — text, voice, video note, sticker, photo,
+        video, document, audio, animation and more. It first tries to download
+        the file and re-send it (which also works when the chat forbids copying/
+        forwarding), then falls back to sending by file_id, then to a plain
+        forward. Nothing is echoed back into the source chat.
         """
         reply = message.reply_to_message
         if not reply:
             return False
 
-        file_id = None
-        media_type = None
-        caption = f"💾 Saqlangan media (Suhbat: {message.chat.full_name or 'Noma\'lum'})"
+        src_name = message.chat.title or getattr(message.chat, "full_name", None) or "Noma'lum"
+        caption = f"💾 {src_name} dan saqlandi"
 
+        # ── Plain text ──
+        if reply.text:
+            text = f"{caption}\n\n{reply.text}"
+            try:
+                await bot.send_message(chat_id=target_chat_id, text=text, parse_mode=None)
+                return True
+            except Exception as e:
+                logger.error(f"Error sending saved text: {e}", exc_info=True)
+                return False
+
+        # ── Media mapping ──
+        file_id = None
+        kind = None
         if reply.photo:
-            file_id = reply.photo[-1].file_id
-            media_type = "photo"
+            file_id, kind = reply.photo[-1].file_id, "photo"
         elif reply.video:
-            file_id = reply.video.file_id
-            media_type = "video"
+            file_id, kind = reply.video.file_id, "video"
         elif reply.voice:
-            file_id = reply.voice.file_id
-            media_type = "voice"
+            file_id, kind = reply.voice.file_id, "voice"
         elif reply.document:
-            file_id = reply.document.file_id
-            media_type = "document"
+            file_id, kind = reply.document.file_id, "document"
         elif reply.audio:
-            file_id = reply.audio.file_id
-            media_type = "audio"
+            file_id, kind = reply.audio.file_id, "audio"
         elif reply.animation:
-            file_id = reply.animation.file_id
-            media_type = "animation"
+            file_id, kind = reply.animation.file_id, "animation"
         elif reply.video_note:
-            file_id = reply.video_note.file_id
-            media_type = "video_note"
+            file_id, kind = reply.video_note.file_id, "video_note"
+        elif reply.sticker:
+            file_id, kind = reply.sticker.file_id, "sticker"
 
         if not file_id:
+            # Other content (contact, location, poll, ...) — try a plain forward
+            try:
+                await bot.forward_message(
+                    chat_id=target_chat_id,
+                    from_chat_id=reply.chat.id,
+                    message_id=reply.message_id
+                )
+                return True
+            except Exception as e:
+                logger.error(f"Could not forward message: {e}")
+                return False
+
+        sender = getattr(bot, f"send_{kind}", None)
+        if sender is None:
             return False
 
+        # Try: download + re-send (works even where forwarding is forbidden)
         try:
             file_info = await bot.get_file(file_id)
             file_bytes = await bot.download_file(file_info.file_path)
-            
-            # Use BufferedInputFile to avoid restrictions on file_id forwarding
             filename = file_info.file_path.split("/")[-1]
             input_file = types.BufferedInputFile(file_bytes.read(), filename=filename)
-
-            if media_type == "photo":
-                await bot.send_photo(chat_id=target_chat_id, photo=input_file, caption=caption)
-            elif media_type == "video":
-                await bot.send_video(chat_id=target_chat_id, video=input_file, caption=caption)
-            elif media_type == "voice":
-                await bot.send_voice(chat_id=target_chat_id, voice=input_file, caption=caption)
-            elif media_type == "document":
-                await bot.send_document(chat_id=target_chat_id, document=input_file, caption=caption)
-            elif media_type == "audio":
-                await bot.send_audio(chat_id=target_chat_id, audio=input_file, caption=caption)
-            elif media_type == "animation":
-                await bot.send_animation(chat_id=target_chat_id, animation=input_file, caption=caption)
-            elif media_type == "video_note":
-                await bot.send_video_note(chat_id=target_chat_id, video_note=input_file)
-
+            if kind in ("video_note", "sticker"):
+                await sender(chat_id=target_chat_id, **{kind: input_file})
+            else:
+                await sender(chat_id=target_chat_id, **{kind: input_file}, caption=caption)
             return True
         except Exception as e:
-            logger.error(f"Error downloading/saving temporary media: {e}", exc_info=True)
-            # Direct file_id send fallback
+            logger.warning(f"Download failed for {kind}, falling back to file_id: {e}")
+            # Fallback: send by file_id
             try:
-                if media_type == "photo":
-                    await bot.send_photo(chat_id=target_chat_id, photo=file_id, caption=caption)
-                elif media_type == "video":
-                    await bot.send_video(chat_id=target_chat_id, video=file_id, caption=caption)
-                elif media_type == "voice":
-                    await bot.send_voice(chat_id=target_chat_id, voice=file_id, caption=caption)
-                elif media_type == "document":
-                    await bot.send_document(chat_id=target_chat_id, document=file_id, caption=caption)
+                if kind in ("video_note", "sticker"):
+                    await sender(chat_id=target_chat_id, **{kind: file_id})
+                else:
+                    await sender(chat_id=target_chat_id, **{kind: file_id}, caption=caption)
                 return True
             except Exception as e2:
-                logger.error(f"Fallback direct send also failed: {e2}")
+                logger.error(f"file_id send also failed: {e2}")
                 return False
 
 media_service = MediaService()

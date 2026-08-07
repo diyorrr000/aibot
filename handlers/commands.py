@@ -1,6 +1,5 @@
 import logging
 from aiogram import Router, types, Bot, F
-from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandObject
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -11,13 +10,9 @@ from storage import (
     set_conn_setting,
     clear_history,
     connection_settings,
-    add_message,
-    get_history,
     is_clock_enabled,
     set_clock_enabled,
 )
-from config import settings
-from services.claude_service import claude_service
 from services.media_service import media_service
 
 logger = logging.getLogger(__name__)
@@ -207,11 +202,16 @@ async def apply_model_change(bot: Bot, conn_id: str, target_model: str):
 @router.message(Command("panel"))
 async def cmd_settings_panel(message: types.Message):
     user_id = message.from_user.id
+    # Userbot faqat admin uchun ishlaydi
+    if user_id != ADMIN_ID:
+        return
     await message.answer(build_settings_panel(user_id), parse_mode=None, reply_markup=get_settings_keyboard(user_id))
 
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
     help_text = "📋 USERBOT BUYRUQLAR RO'YXATI\n\n"
     for cmd, (title, desc) in USERBOT_COMMANDS.items():
         help_text += f"{title}\n  Buyruq: {cmd}\n  {desc}\n\n"
@@ -424,15 +424,20 @@ async def cb_refresh_panel(callback: types.CallbackQuery):
 # ─────────────────────────────────────────────────────────
 @router.message(F.chat.type == "private")
 async def handle_private_message(message: types.Message, bot: Bot):
+    # Userbot faqat admin uchun ishlaydi
+    if message.from_user.id != ADMIN_ID:
+        return
+
     text = message.text.strip() if message.text else ""
 
-    # .ok — media saqlash
-    if text.lower() == ".ok" and message.reply_to_message:
-        success = await media_service.save_temporary_media(bot, message, message.chat.id)
-        if success:
-            await message.reply("✅ Media shaxsiy chatingizga saqlandi!")
-        else:
-            await message.reply("❌ Mediani saqlashda xatolik.")
+    # .ok — javobdagi kontentni saqlaydi (jim: buyruq o'chiriladi, adminga yuboriladi)
+    if text.lower() == ".ok":
+        if message.reply_to_message:
+            await media_service.save_temporary_media(bot, message, ADMIN_ID)
+        try:
+            await message.delete()
+        except Exception:
+            pass
         return
 
     # Userbot buyruqlari shaxsiy chatda ham ishlaydi (hohlagan joyda)
@@ -467,6 +472,10 @@ async def handle_group_message(message: types.Message, bot: Bot):
     if not user_id:
         return
 
+    # Userbot faqat admin uchun ishlaydi
+    if user_id != ADMIN_ID:
+        return
+
     # Faqat business akkount egasi uchun ishlaydi
     conn_id, conn = find_user_connection(user_id)
     if not conn:
@@ -480,67 +489,16 @@ async def handle_group_message(message: types.Message, bot: Bot):
     cmd_word = parts[0].lower()
     args = parts[1] if len(parts) > 1 else ""
 
+    # .ok — javobdagi kontentni saqlaydi (jim: buyruq o'chiriladi, adminga yuboriladi)
     if cmd_word == ".ok":
+        if message.reply_to_message:
+            await media_service.save_temporary_media(bot, message, ADMIN_ID)
+        try:
+            await message.delete()
+        except Exception:
+            pass
         return
 
     handled = await handle_owner_command(bot, message, conn_id, cmd_word, args)
     if not handled:
         await message.answer("❓ Noma'lum buyruq.\n\nBarcha buyruqlar: .help", parse_mode=None)
-
-    # Typing indicator
-    try:
-        await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
-    except Exception:
-        pass
-
-    # Media processing
-    gemini_contents = []
-    log_content = ""
-
-    if message.photo:
-        gemini_contents = await media_service.process_photo(bot, message.photo, message.caption or "")
-        log_content = f"[Rasm] {message.caption or ''}"
-    elif message.voice:
-        gemini_contents = await media_service.process_voice(bot, message.voice)
-        log_content = "[Ovozli xabar]"
-    elif message.document:
-        gemini_contents = await media_service.process_document(bot, message.document, message.caption or "")
-        log_content = f"[Hujjat: {message.document.file_name}]"
-    elif message.text:
-        gemini_contents = [message.text]
-        log_content = message.text
-    else:
-        await message.answer("Kechirasiz, bu turdagi xabar qo'llab-quvvatlanmaydi.", parse_mode=None)
-        return
-
-    history = get_history(message.chat.id, limit=settings.max_history_length)
-    history_text = ""
-    if history:
-        history_text = "Oldingi suhbat:\n"
-        for h in history:
-            role_label = "Foydalanuvchi" if h["role"] == "user" else "Yordamchi"
-            history_text += f"{role_label}: {h['content']}\n"
-        history_text += "\nYangi xabar:\n"
-
-    final_contents = []
-    if history_text:
-        final_contents.append(history_text)
-    final_contents.extend(gemini_contents)
-
-    add_message(message.chat.id, "user", log_content)
-
-    try:
-        reply_text = await claude_service.generate_response(
-            contents=final_contents,
-            system_prompt=settings.default_system_prompt,
-        )
-    except Exception as e:
-        logger.error(f"AI error in private chat: {e}", exc_info=True)
-        reply_text = "Kechirasiz, vaqtinchalik xatolik yuz berdi."
-
-    add_message(message.chat.id, "assistant", reply_text)
-
-    try:
-        await message.answer(text=reply_text, parse_mode=None)
-    except Exception as e:
-        logger.error(f"Failed to send private reply: {e}", exc_info=True)

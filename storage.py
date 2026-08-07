@@ -32,6 +32,11 @@ connection_settings: Dict[str, Dict[str, Any]] = {}
 # Once an AI starts answering in a chat it stays there until changed explicitly.
 chat_models: Dict[str, str] = {}
 
+# Per-chat "greeted today" tracking — the AI greets a customer only once a day
+# and then continues the conversation naturally without re-greeting.
+greeting_dates: Dict[str, str] = {}   # chat_id -> "YYYY-MM-DD"
+GREETING_FILE = "database/greeting_dates.json"
+
 # ── Disk persistence ───────────────────────────────────────
 # connection_settings / chat_models are in-memory. After a server restart they
 # would be empty, which breaks owner commands in every chat except the bot's
@@ -70,6 +75,10 @@ def _load_persisted():
     for key, model in saved_models.items():
         if isinstance(model, str):
             chat_models[key] = model
+    saved_greetings = _load_json(GREETING_FILE)
+    for cid, d in saved_greetings.items():
+        if isinstance(d, str):
+            greeting_dates[cid] = d
 
 
 def get_chat_model(conn_id: str, chat_id: int) -> str:
@@ -78,6 +87,13 @@ def get_chat_model(conn_id: str, chat_id: int) -> str:
 def set_chat_model(conn_id: str, chat_id: int, model: str):
     chat_models[f"{conn_id}:{chat_id}"] = model
     _save_json(MODELS_FILE, chat_models)
+
+def get_greeting_date(chat_id: int) -> str:
+    return greeting_dates.get(str(chat_id), "")
+
+def set_greeting_date(chat_id: int, date_str: str):
+    greeting_dates[str(chat_id)] = date_str
+    _save_json(GREETING_FILE, greeting_dates)
 
 def get_history(chat_id: int, limit: int = None) -> List[Dict[str, Any]]:
     history = chat_histories[chat_id]
@@ -109,7 +125,7 @@ def get_conn_settings(connection_id: str) -> Dict[str, Any]:
         connection_settings[connection_id] = {
             "system_prompt": settings.default_system_prompt,
             "is_enabled": False,
-            "is_approved": False,  # Not approved until business_connection update + admin approval
+            "is_approved": True,   # No manual approval — the bot works immediately
             "user_id": None,
             "username": "Noma'lum",
             "first_name": "",
