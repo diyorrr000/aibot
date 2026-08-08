@@ -5,23 +5,23 @@ from app.utils.logger import logger
 def get_main_reply_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     kb = [
         [
-            KeyboardButton(text="🤖 Gemini 2.5 Flash AI"),
-            KeyboardButton(text="🎛 AI Sozlamalar")
+            KeyboardButton(text="🤖 Gemini 2.5 Flash AI", style="primary"),
+            KeyboardButton(text="🎛 AI Sozlamalar", style="success")
         ],
         [
-            KeyboardButton(text="🧩 Plaginlar va Buyruqlar"),
-            KeyboardButton(text="💼 Business Ulanish")
+            KeyboardButton(text="🧩 Plaginlar va Buyruqlar", style="primary"),
+            KeyboardButton(text="💼 Business Ulanish", style="success")
         ],
         [
-            KeyboardButton(text="👤 Profilim"),
-            KeyboardButton(text="⚙️ Sozlamalar")
+            KeyboardButton(text="👤 Profilim", style="primary"),
+            KeyboardButton(text="⚙️ Sozlamalar", style="primary")
         ],
         [
-            KeyboardButton(text="📖 Yordam")
+            KeyboardButton(text="📖 Yordam", style="success")
         ]
     ]
     if is_admin:
-        kb.append([KeyboardButton(text="👑 Admin Panel")])
+        kb.append([KeyboardButton(text="👑 Admin Panel", style="danger")])
 
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
