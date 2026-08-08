@@ -1,41 +1,115 @@
-# 🤖 Telegram Business AI & Userbot (telegram-gemini-bot)
+# 🤖 Telegram Business AI & Userbot Platform (Production-Ready Architecture)
 
-## 📌 Loyiha Haqida
+High-performance, modular, and scalable Telegram AI Platform built with **Python 3.12**, **Aiogram 3.x**, **SQLAlchemy Async**, **aiohttp**, **Pydantic v2**, and **Docker**.
 
-Ushbu loyiha Telegram Business foydalanuvchilari uchun maxsus yaratilgan **AI Yordamchi** va **Userbot** funksiyalarini birlashtirgan universal bot hisoblanadi. Bot Telegram Business orqali sizning nomingizdan kelgan xabarlarga avtomatik javob beradi (Claude 4.5 va Grok 4.3 orqali) va turli `.command` animatsiyalar hamda buyruqlarni qo'llab-quvvatlaydi.
-
-## 🚀 Asosiy Qilingan Ishlar
-
-1. **AI Modellarni Integratsiya Qilish (KILWA API)**
-   - Claude Haiku 4.5 va Grok 4.3 modellari ulandi.
-   - Ikkala model o'rtasida `/admin` panelidan real vaqtda almashish imkoniyati qo'shildi.
-
-2. **Telegram Business va Ruxsat (Approval) Tizimi**
-   - Yangi Business hisob ulanganida u **Avto-to'xtatilgan (Disabled)** holatda bo'ladi.
-   - Admin (`7306854093`) ga tasdiqlash uchun xabar boradi (`/approve <conn_id>` yoki inline tugma orqali).
-   - Foydalanuvchining real `@username` yoki Ismi AI Promptga kiritildi (bot o'zini "Noma'lum" demaydi).
-
-3. **O'zbekiston Soati (Profil Ismida)**
-   - Asinxron background tsikl orqali har 1 daqiqada bot o'zining Business Connection egalarining "Familiya" qismiga joriy soatni qalin (BOLD) raqamlarda (`𝟏𝟗:𝟓𝟓`) yangilab turadi.
-
-4. **Userbot Buyruqlari (.help) va Animatsiyalar**
-   - Userbot repo-dan 31 ta plaginlar fayllari ko'chirib o'tildi.
-   - Aiogram Business Message doirasida **Animatsiyalar** (masalan `.love`, `.snow`, `.xd`, `.police`) Aiogramning `edit_message_text` orqali to'g'ridan-to'g'ri ishlashi joriy qilindi. (Alohida Telethon sessiyasi talab qilinmaydi!)
-   - **Xatolikni to'g'irlash (Typo Correction)**: Agar foydalanuvchi `.lovee` yoki `.tts2` deb xato yozsa, bot eng yaqin to'g'ri buyruqni taklif qiladi va tushuntiradi.
-
-5. **Xavfsizlik va Anti-Ban Guard (FloodWait himoyasi)**
-   - Bot juda ko'p so'rov yubormasligi uchun maxsus asinxron Delay (kechikish) tizimi va Rate Limiter yozildi.
-   - Render.com dagi `TelegramConflictError` xatoligini bartaraf etish uchun `start_polling` oldidan webhooklarni agressiv tozalash tizimi qo'shildi.
-
-## 🛠 Hozirgi Holat (Qayerga keldik?)
-
-- Barcha yozilgan xatolar tuzatilib (ImportError, TelegramConflictError) GitHub-ga Deploy qilindi.
-- Admin Panel (Inline Buttons) mukammal ishlayapti: Avto-javobni yoqish, Modelni o'zgartirish, Profil soati, va Hisoblarni tasdiqlash tugmalari.
-- `.help` buyrug'i barcha chatlarda (egasi yozsa) ishlaydi va ro'yxatni ko'rsatadi.
-- Asosiy Userbot animatsiyalari `.love`, `.snow`, `.ping` va boshqalar endi Aiogram orqali **hamma chatlarda (qayerga yozsangiz ham)** ishlaydi.
-
-## 📝 Keyingi Qadamlar (TODO)
-- Qolgan Userbot API (ob-havo, tarjima, tiktok yuklash) funksiyalarini Aiogram orqali `business_message.py` ga to'liq integratsiya qilish (hozirda animatsiyalar qismi ishlaydi).
+Supports multi-model AI (Claude 4.5, Grok 4.3, GPT 4o, Gemini 2.5 Flash Lite) with automated fallbacks, Telegram Business integration, dynamic plugin management, rate limiting, and Uzbekistan profile clock updates.
 
 ---
-*Ushbu hujjat Antigravity AI tomonidan yaratildi.*
+
+## 🏛 Architecture Overview
+
+```text
+telegram-gemini-bot/
+├── app/
+│   ├── config/             # Pydantic environment configuration
+│   ├── database/           # Async SQLAlchemy Engine, Models & Repositories
+│   ├── services/
+│   │   ├── ai/             # AI Provider Factory (Claude, Grok, GPT, Gemini)
+│   │   ├── media.py        # Photo, voice & .ok media saver
+│   │   └── animation.py    # Async text animation engine
+│   ├── handlers/           # Aiogram routers (Start, Admin, Business)
+│   ├── plugins/            # Dynamic Plugin Manager & self-contained modules
+│   ├── keyboards/          # Inline UI keyboards & BotCommand menu
+│   ├── middlewares/        # Rate limiting & global error handling
+│   └── utils/              # Structured logging & helpers
+├── Dockerfile              # Non-root, optimized container setup
+├── docker-compose.yml      # Multi-container setup with Postgres & Healthchecks
+├── requirements.txt        # Pinned dependencies
+├── main.py                 # Entrypoint
+└── README.md
+```
+
+---
+
+## 🚀 Key Features
+
+1. **Multi-Model AI Provider System**
+   - Claude 4.5, Grok 4.3, GPT 4o, and Gemini 2.5 Flash Lite.
+   - Automatic provider fallbacks and retries on API timeouts.
+   - Per-chat model pinning (`.model claude|grok|gpt`).
+
+2. **Telegram Business API Auto-Reply**
+   - Native integration with `business_connection_id` and `business_message`.
+   - Daily greeting logic (greets once per day per customer, then continues naturally).
+   - Silent media saver (`.ok` command).
+
+3. **Dynamic Plugin Manager**
+   - Self-contained command plugins (`.weather`, `.tr`, `.currency`, `.yt`, `.anime`, `.tts`, `.telegraph`, `.shortlink`, `.gender`, `.me`, `.do`, `.try`, `.todo`, `.roulette`).
+   - Isolated execution boundaries (a plugin error won't crash the bot).
+
+4. **Uzbekistan Profile Clock Sync**
+   - Background task updating Telegram Business profile names and descriptions with bold live time digits (`𝟏𝟗:𝟓𝟓`).
+
+5. **Production Ready & Secure**
+   - Async non-blocking I/O throughout (`aiohttp`, `asyncio`).
+   - Built-in HTTP health check endpoint (`GET /health`) for Render/cloud platforms.
+   - Containerized with non-root security practices.
+
+---
+
+## 🛠 Local Setup & Development
+
+### 1. Requirements
+- Python 3.10+
+- SQLite or PostgreSQL
+
+### 2. Installation
+```bash
+git clone https://github.com/diyorrr000/aibot.git
+cd telegram-gemini-bot
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 3. Environment Variables
+Copy `.env.example` to `.env` and fill in your details:
+```env
+TELEGRAM_BOT_TOKEN=your_bot_token_from_botfather
+GEMINI_API_KEY=your_gemini_api_key
+DATABASE_URL=sqlite+aiosqlite:///./bot.db
+ADMIN_IDS=7306854093
+DEFAULT_MODEL=claude
+RATE_LIMIT_SECONDS=1.5
+PORT=3000
+LOG_LEVEL=INFO
+```
+
+### 4. Run Locally
+```bash
+python main.py
+```
+
+---
+
+## 🐳 Docker Deployment
+
+Run with Docker Compose:
+```bash
+docker-compose up -d --build
+```
+
+Health check endpoint:
+```bash
+curl http://localhost:3000/health
+```
+
+---
+
+## 📄 License
+MIT License
