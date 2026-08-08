@@ -51,12 +51,29 @@ async def cmd_anime(bot: Bot, message: types.Message, conn_id: str, args: str):
         await send_fb(bot, message, conn_id, f"🚫 <b>Anime xatosi:</b> <code>{e}</code>")
 
 async def cmd_meme(bot: Bot, message: types.Message, conn_id: str, args: str):
-    memes = [
+    await send_typing(bot, message, conn_id)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://meme-api.com/gimme", timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    img_url = data.get("url")
+                    title = data.get("title", "Meme")
+                    if img_url:
+                        try:
+                            await bot.send_photo(chat_id=message.chat.id, photo=img_url, caption=f"😂 <b>{title}</b>", business_connection_id=conn_id)
+                        except Exception:
+                            await bot.send_photo(chat_id=message.chat.id, photo=img_url, caption=f"😂 <b>{title}</b>")
+                        return
+    except Exception:
+        pass
+
+    fallback_memes = [
         "😂 Dasturchi: 'Kod mening kompyuterimda ishlayapti!'\nQA: 'Biz mijozlarga sening kompyuteringni sotmaymiz!'",
         "🤣 'Bug' emas, bu hujjatlashtirilmagan funksiya!",
         "🤖 AI: 'Men insoniyat o'rnini egallayman'\nInson: '.help qanday ishlaydi?'\nAI: 'Kechirasiz...'",
     ]
-    await send_fb(bot, message, conn_id, f"😂 <b>Random Meme:</b>\n\n{random.choice(memes)}")
+    await send_fb(bot, message, conn_id, f"😂 <b>Random Meme:</b>\n\n{random.choice(fallback_memes)}")
 
 def register(pm):
     pm.register_command(".yt", cmd_yt)

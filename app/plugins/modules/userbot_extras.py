@@ -3,7 +3,9 @@ import datetime
 import io
 import json
 import os
+import textwrap
 import aiohttp
+from PIL import Image, ImageDraw, ImageFont
 from aiogram import Bot, types
 from aiogram.enums import ChatAction
 from app.utils.helpers import get_uzb_now
@@ -20,6 +22,24 @@ async def send_fb(bot: Bot, message: types.Message, conn_id: str, text: str, par
         await bot.send_message(chat_id=message.chat.id, text=text, business_connection_id=conn_id, parse_mode=parse_mode)
     except Exception:
         await bot.send_message(chat_id=message.chat.id, text=text, parse_mode=parse_mode)
+
+def generate_local_quote_sticker(author_name: str, text: str) -> bytes:
+    width, height = 512, 256
+    img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    card_box = [10, 10, width - 10, height - 10]
+    draw.rounded_rectangle(card_box, radius=20, fill=(24, 27, 38, 240), outline=(0, 136, 204, 255), width=2)
+    
+    lines = textwrap.wrap(text, width=32)
+    wrapped_text = "\n".join(lines[:5])
+    
+    draw.text((30, 25), author_name[:25], fill=(0, 184, 217))
+    draw.text((30, 65), f"“ {wrapped_text} ”", fill=(240, 240, 240))
+    
+    out = io.BytesIO()
+    img.save(out, format='WEBP')
+    return out.getvalue()
 
 # All Modules Menu (.co, .func, .komandalar)
 async def cmd_all_modules(bot: Bot, message: types.Message, conn_id: str, args: str):
@@ -71,19 +91,20 @@ async def cmd_acc(bot: Bot, message: types.Message, conn_id: str, args: str):
 
 # Anime Arts (.art, .nsfwart)
 async def cmd_anime_arts(bot: Bot, message: types.Message, conn_id: str, args: str, nsfw: bool = False):
-    category = "nsfw" if nsfw else "sfw"
+    endpoint = "waifu" if nsfw else "neko"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://api.waifu.pics/{category}/waifu", timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.get(f"https://nekos.life/api/v2/img/{endpoint}", timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 data = await resp.json()
                 img_url = data.get("url")
                 if img_url:
-                    async with session.get(img_url) as r2:
-                        img_bytes = await r2.read()
-                        photo = types.BufferedInputFile(img_bytes, filename="anime.jpg")
-                        caption = "🍿 <b>NSFW anime surat!</b>" if nsfw else "🍿 <b>Yoqimli anime surat!</b>"
+                    photo = types.URLInputFile(img_url)
+                    caption = "🍿 <b>NSFW anime surat!</b>" if nsfw else "🍿 <b>Yoqimli anime surat!</b>"
+                    try:
                         await bot.send_photo(chat_id=message.chat.id, photo=photo, caption=caption, business_connection_id=conn_id)
-                        return
+                    except Exception:
+                        await bot.send_photo(chat_id=message.chat.id, photo=photo, caption=caption)
+                    return
         await send_fb(bot, message, conn_id, "🚫 <b>Surat yuklab bo'lmadi.</b>")
     except Exception as e:
         await send_fb(bot, message, conn_id, f"🚫 <b>Xato:</b> <code>{e}</code>")
@@ -172,31 +193,24 @@ async def cmd_read_file(bot: Bot, message: types.Message, conn_id: str, args: st
 # Quote Sticker (.q, .r)
 async def cmd_quote_sticker(bot: Bot, message: types.Message, conn_id: str, args: str):
     reply = message.reply_to_message
-    if not reply or not (reply.text or reply.caption):
-        await send_fb(bot, message, conn_id, "💬 <b>Matnli xabarga reply qiling!</b>")
+    quote_text = args.strip() if args else (reply.text or reply.caption if reply else "")
+    if not quote_text:
+        await send_fb(bot, message, conn_id, "💬 <b>Matn yozing yoki matnli xabarga reply qiling!</b>")
         return
-    quote_text = args.strip() if args else (reply.text or reply.caption)
-    u = reply.from_user if reply.from_user else message.from_user
+
+    author_name = "User"
+    if reply and reply.from_user:
+        author_name = reply.from_user.full_name or reply.from_user.first_name
+    elif message.from_user:
+        author_name = message.from_user.full_name or message.from_user.first_name
+
     try:
-        payload = {
-            "type": "quote", "format": "webp", "backgroundColor": "#1b1429", "width": 512, "height": 512, "scale": 1.1,
-            "messages": [{
-                "entities": [], "avatar": True,
-                "from": {"id": u.id, "first_name": u.first_name, "last_name": u.last_name or "", "username": u.username or ""},
-                "text": quote_text, "replyMessage": {}
-            }]
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post("https://bot.lyo.su/quote/generate", json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if "result" in data and "image" in data["result"]:
-                        import base64
-                        img_bytes = base64.b64decode(data["result"]["image"])
-                        sticker = types.BufferedInputFile(img_bytes, filename="quote.webp")
-                        await bot.send_sticker(chat_id=message.chat.id, sticker=sticker, business_connection_id=conn_id)
-                        return
-        await send_fb(bot, message, conn_id, "💬 <b>Stiker formatlab bo'lmadi.</b>")
+        sticker_bytes = generate_local_quote_sticker(author_name, quote_text)
+        sticker_file = types.BufferedInputFile(sticker_bytes, filename="quote.webp")
+        try:
+            await bot.send_sticker(chat_id=message.chat.id, sticker=sticker_file, business_connection_id=conn_id)
+        except Exception:
+            await bot.send_sticker(chat_id=message.chat.id, sticker=sticker_file)
     except Exception as e:
         await send_fb(bot, message, conn_id, f"🚫 <b>Quote xatosi:</b> <code>{e}</code>")
 
