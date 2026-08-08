@@ -9,6 +9,7 @@ from app.database.connection import async_session
 from app.database.repository import (
     upsert_business_connection,
     get_business_connection,
+    get_all_business_connections,
     remove_stale_user_connections,
     add_chat_message,
     get_chat_history,
@@ -34,6 +35,33 @@ async def send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_mo
             await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
         except Exception as e:
             logger.error(f"Failed to send text fallback: {e}")
+
+async def sync_all_business_connections(bot: Bot):
+    """Background task: periodically check and re-sync all business connections from Telegram API."""
+    try:
+        async with async_session() as session:
+            conns = await get_all_business_connections(session)
+            for conn in conns:
+                try:
+                    bc = await bot.get_business_connection(connection_id=conn.connection_id)
+                    if bc:
+                        username = f"@{bc.user.username}" if bc.user.username else (bc.user.full_name or "akkount egasi")
+                        await upsert_business_connection(
+                            session=session,
+                            connection_id=conn.connection_id,
+                            user_id=bc.user.id,
+                            user_chat_id=bc.user.id,
+                            username=username,
+                            first_name=bc.user.first_name or "",
+                            last_name=bc.user.last_name or "",
+                            can_reply=bc.can_reply,
+                            is_enabled=True,
+                            is_approved=True
+                        )
+                except Exception as e:
+                    logger.debug(f"Sync check for conn {conn.connection_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error in sync_all_business_connections: {e}")
 
 @router.business_connection()
 async def handle_business_connection(business_connection: types.BusinessConnection, bot: Bot):
@@ -63,7 +91,7 @@ async def handle_business_connection(business_connection: types.BusinessConnecti
     try:
         await bot.send_message(
             chat_id=user_id,
-            text=f"✅ Telegram Business hisobingiz botga ulandi!\n👤 Hisob: {username}\n⚙️ Sozlamalar: /settings",
+            text=f"✅ Telegram Business hisobingiz botga ulandi va faollashtirildi!\n👤 Hisob: {username}\n⚙️ Sozlamalar: /settings",
             parse_mode=None
         )
     except Exception as e:

@@ -11,6 +11,7 @@ from app.database.connection import init_db, async_session
 from app.database.repository import get_all_business_connections
 from app.plugins.manager import plugin_manager
 from app.keyboards.menu import register_bot_commands
+from app.handlers.business import sync_all_business_connections
 from app.bot import bot, dp
 
 async def health_check(request):
@@ -58,6 +59,15 @@ async def update_clock_task(bot_instance: Bot):
 
         await asyncio.sleep(60)
 
+async def auto_sync_business_task(bot_instance: Bot):
+    """Periodically check and re-activate all business connections to handle redeployments seamlessly."""
+    while True:
+        try:
+            await sync_all_business_connections(bot_instance)
+        except Exception as e:
+            logger.error(f"Business sync error: {e}")
+        await asyncio.sleep(10)
+
 async def main():
     logger.info("Bot starting up...")
 
@@ -73,13 +83,14 @@ async def main():
     # Register Bot Menu Commands
     await register_bot_commands(bot)
 
-    # Launch Clock Task
+    # Launch Background Sync & Clock Tasks
     asyncio.create_task(update_clock_task(bot))
+    asyncio.create_task(auto_sync_business_task(bot))
 
-    # Clear Webhook
+    # Clear Webhook without dropping pending business updates
     logger.info("Clearing active webhook...")
     try:
-        await bot.delete_webhook(drop_pending_updates=True)
+        await bot.delete_webhook(drop_pending_updates=False)
     except Exception as e:
         logger.warning(f"delete_webhook failed: {e}")
 
