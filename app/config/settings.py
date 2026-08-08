@@ -8,13 +8,13 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
     database_url: str = Field(default="sqlite+aiosqlite:///./bot.db", validation_alias="DATABASE_URL")
     admin_ids_raw: Union[str, int, List[int]] = Field(default="7306854093", validation_alias="ADMIN_IDS")
-    default_model: str = Field(default="claude", validation_alias="DEFAULT_MODEL")
+    default_model: str = Field(default="gemini", validation_alias="DEFAULT_MODEL")
     default_system_prompt: str = Field(
         default=(
             "Siz Telegram Business shaxsiy yordamchisisiz.\n"
             "QOIDALAR:\n"
             "1. Har qanday vaziyatda FAQAT va FAQAT O'zbek tilida javob bering.\n"
-            "2. Hech qachon Anthropic, Claude, OpenAI yoki AI model/bot haqida gapirmang.\n"
+            "2. Hech qachon Anthropic, Claude, OpenAI, Google, Gemini yoki AI model/bot haqida gapirmang.\n"
             "3. O'zingizni shunchaki ushbu akkaunt egasining shaxsiy yordamchisi deb biling.\n"
             "4. HAR XABARDA SALOM BERMANG — faqat kun davomidagi birinchi murojaatga bitta qisqa salom bilan boshlashingiz mumkin.\n"
             "5. Javoblar batafsil, aniq va foydali bo'lsin. Bir xil so'zlarni takrorlamang. Xuddi odam yozayotgandek tabiiy bo'lsin.\n"
