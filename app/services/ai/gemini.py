@@ -37,10 +37,11 @@ class GeminiProvider(BaseAIProvider):
         config = types.GenerateContentConfig(
             system_instruction=(
                 f"{prompt_system}\n"
-                "CRITICAL INSTRUCTIONS:\n"
+                "CRITICAL SYSTEM RULES:\n"
                 "1. You must write and respond exclusively in the Uzbek language.\n"
-                "2. In your responses, NEVER use bold markdown formatting (do NOT use **).\n"
-                "3. Code blocks must use standard triple backticks."
+                "2. NEVER use bold markdown formatting (do NOT use **).\n"
+                "3. Code blocks must use standard triple backticks.\n"
+                "4. NEVER state or reveal that you are Google, Gemini, OpenAI, Claude, AI, LLM, or a bot. You are ALWAYS strictly the personal assistant of the Telegram account owner."
             )
         )
 

@@ -37,7 +37,6 @@ async def send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_mo
             logger.error(f"Failed to send text fallback: {e}")
 
 async def sync_all_business_connections(bot: Bot):
-    """Background task: periodically check and re-sync all business connections from Telegram API."""
     try:
         async with async_session() as session:
             conns = await get_all_business_connections(session)
@@ -222,12 +221,24 @@ async def handle_business_message(message: types.Message, bot: Bot):
 
     owner_handle = conn.username or conn.first_name or "akkount egasi"
     sys_prompt = conn.system_prompt or (
-        f"Sen {owner_handle} ning shaxsiy yordamchisisan. "
-        f"Vazifang: kelgan murojaatlarga o'zbek tilida javob berish. "
-        f"1. Faqat o'zbek tilida yoz; o'zingni 'shaxsiy yordamchiman' deb tanishtir. "
-        f"2. HAR XABARDA SALOM BERMA! "
-        f"3. Javoblar to'liq va foydali bo'lsin."
+        f"Siz {owner_handle} ning shaxsiy yordamchisisiz. "
+        f"VAZIFANGIZ: Kelgan murojaatlarga o'zbek tilida muloqot qilgan holda javob berish.\n\n"
+        f"QOIDALAR:\n"
+        f"1. FAQAT va FAQAT O'zbek tilida yozing.\n"
+        f"2. Nomi, shakli yoki AI modeli haqida so'ralganda (masalan 'sen kimsan', 'qaysi modelsan', 'AI misan', 'Google misan'): HECH QACHON Google, Gemini, OpenAI, Claude, Anthropic, Sun'iy intellekt yoki AI model ekanligingizni AYTMANG! FAQAT 'Men {owner_handle} ning shaxsiy yordamchisiman' deb javob bering.\n"
+        f"3. Xabarlarda o'zingizni har safar qayta tanishtirmang ('Men shaxsiy yordamchiman' deb qayta yozmang)."
     )
+
+    if first_msg_today:
+        sys_prompt += (
+            f"\n\n4. Bugun bu mijozning kun davomidagi BIRINCHI murojaati. "
+            f"Javobni bitta qisqa salom bilan boshlashingiz mumkin (masalan 'Assalomu alaykum! Qanday yordam bera olaman?'), so'ng murojaatiga to'liq javob bering."
+        )
+    else:
+        sys_prompt += (
+            f"\n\n4. Bugun bu chatda ALLAQACHON salomlashilgan va muloqot davom etmoqda. "
+            f"HECH QANDAY salom berish yoki 'Assalomu alaykum' deyish MUMKIN EMAS! O'zingizni qayta tanishtirmang — FAQAT berilgan savolga to'g'ridan-to'g'ri javob bering."
+        )
 
     selected_model = pinned_model or conn.model or settings.default_model
     reply_text = await ai_factory.generate_response(contents, sys_prompt, preferred_model=selected_model)

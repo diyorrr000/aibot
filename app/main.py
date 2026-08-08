@@ -66,7 +66,7 @@ async def auto_sync_business_task(bot_instance: Bot):
             await sync_all_business_connections(bot_instance)
         except Exception as e:
             logger.error(f"Business sync error: {e}")
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
 
 async def main():
     logger.info("Bot starting up...")
