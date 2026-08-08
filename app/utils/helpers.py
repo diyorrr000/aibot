@@ -14,9 +14,11 @@ def to_bold_time(time_str: str) -> str:
     return "".join(BOLD_DIGITS.get(c, c) for c in time_str)
 
 def clean_ai_markdown(text: str) -> str:
-    """Safely convert AI markdown into Telegram Rich HTML Messages with full entity escaping."""
+    """Safely convert AI markdown into Telegram Rich HTML Messages with full entity unescaping for apostrophes."""
     if not text:
         return ""
+
+    text = html.unescape(text)
 
     if "\n---\n" in text:
         text = text.split("\n---\n")[0]
@@ -27,12 +29,12 @@ def clean_ai_markdown(text: str) -> str:
 
     code_blocks = []
     def save_code_block(match):
-        code = html.escape(match.group(1).strip())
+        code = html.escape(match.group(1).strip(), quote=False)
         code_blocks.append(f'<pre><code>{code}</code></pre>')
         return f'___CODE_BLOCK_{len(code_blocks)-1}___'
 
     text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
-    text = html.escape(text)
+    text = html.escape(text, quote=False)
 
     text = re.sub(r'^#{1,3}\s+(.+)$', r'📌 <b>\1</b>', text, flags=re.MULTILINE)
     text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
