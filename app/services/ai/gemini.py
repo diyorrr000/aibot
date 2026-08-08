@@ -10,13 +10,16 @@ from app.utils.helpers import clean_ai_markdown
 logger = logging.getLogger(__name__)
 
 class GeminiProvider(BaseAIProvider):
-    def __init__(self, api_key: str = settings.gemini_api_key):
+    def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key
         self._client = None
 
     def get_client(self):
-        if not self._client and self.api_key:
-            self._client = genai.Client(api_key=self.api_key)
+        key = self.api_key or settings.gemini_api_key
+        if not key:
+            return None
+        if not self._client:
+            self._client = genai.Client(api_key=key)
         return self._client
 
     async def generate_response(
@@ -31,10 +34,7 @@ class GeminiProvider(BaseAIProvider):
             raise ValueError("GEMINI_API_KEY is not configured.")
 
         prompt_system = system_prompt or settings.default_system_prompt
-        thinking_config = types.ThinkingConfig(thinking_budget=0)
-
         config = types.GenerateContentConfig(
-            thinking_config=thinking_config,
             system_instruction=(
                 f"{prompt_system}\n"
                 "CRITICAL INSTRUCTIONS:\n"
@@ -50,7 +50,7 @@ class GeminiProvider(BaseAIProvider):
             try:
                 response = await asyncio.wait_for(
                     client.aio.models.generate_content(
-                        model=settings.default_model or "gemini-2.5-flash-lite",
+                        model="gemini-2.5-flash-lite",
                         contents=contents,
                         config=config
                     ),

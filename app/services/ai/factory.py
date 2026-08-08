@@ -18,23 +18,23 @@ class AIProviderFactory:
         }
 
     def get(self, name: str) -> BaseAIProvider:
-        key = name.lower().strip() if name else "claude"
-        return self.providers.get(key, self.providers["claude"])
+        key = name.lower().strip() if name else "gemini"
+        return self.providers.get(key, self.providers["gemini"])
 
     async def generate_response(
         self,
         contents: List[Any],
         system_prompt: Optional[str] = None,
-        preferred_model: str = "claude",
+        preferred_model: str = "gemini",
         timeout: float = 20.0,
     ) -> str:
-        preferred = (preferred_model or "claude").lower()
+        preferred = (preferred_model or "gemini").lower()
         if preferred not in self.providers:
-            preferred = "claude"
+            preferred = "gemini"
 
-        # Fallback chain order
+        # Fallback chain order: preferred first, then Gemini (which is working & fast), then others
         chain = [preferred]
-        for m in ("claude", "gpt", "grok", "gemini"):
+        for m in ("gemini", "claude", "gpt", "grok"):
             if m not in chain:
                 chain.append(m)
 

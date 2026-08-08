@@ -13,7 +13,6 @@ from app.database.repository import (
     add_chat_message,
     get_chat_history,
     get_pinned_chat_model,
-    set_pinned_chat_model,
     get_greeting_date,
     set_greeting_date,
 )
@@ -31,7 +30,10 @@ async def send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_mo
     try:
         await bot.send_message(chat_id=chat_id, text=text, business_connection_id=conn_id, parse_mode=parse_mode)
     except Exception:
-        await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
+        try:
+            await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
+        except Exception as e:
+            logger.error(f"Failed to send text fallback: {e}")
 
 @router.business_connection()
 async def handle_business_connection(business_connection: types.BusinessConnection, bot: Bot):
@@ -79,7 +81,6 @@ async def handle_business_message(message: types.Message, bot: Bot):
     async with async_session() as session:
         conn = await get_business_connection(session, conn_id)
         if not conn:
-            # Recover connection
             try:
                 bc = await bot.get_business_connection(connection_id=conn_id)
                 username = f"@{bc.user.username}" if bc.user.username else (bc.user.full_name or "akkount egasi")
@@ -103,7 +104,7 @@ async def handle_business_message(message: types.Message, bot: Bot):
     text = (message.text or message.caption or "").strip()
 
     # ── OWNER MESSAGES ──────────────────────────────────────
-    if user_id and user_id == owner_uid:
+    if user_id and (user_id == owner_uid or user_id in settings.admin_ids):
         if text.lower() == ".ok":
             try:
                 await bot.delete_business_messages(business_connection_id=conn_id, message_ids=[message.message_id])
@@ -141,7 +142,6 @@ async def handle_business_message(message: types.Message, bot: Bot):
                 await send_text_fb(bot, chat_id, f"❓ Noma'lum buyruq: <code>{cmd_word}</code>", conn_id, parse_mode="HTML")
             return
 
-        # Owner's normal message → record as assistant history
         if text:
             async with async_session() as session:
                 await add_chat_message(session, conn_id, chat_id, "assistant", text)
@@ -169,7 +169,6 @@ async def handle_business_message(message: types.Message, bot: Bot):
     except Exception:
         pass
 
-    # Build input contents
     contents = []
     log_content = text
     if message.photo:

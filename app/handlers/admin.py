@@ -52,13 +52,23 @@ async def cmd_approve(message: types.Message, command: CommandObject, bot: Bot):
     else:
         await message.answer("❌ Connection topilmadi.", parse_mode=None)
 
-@router.callback_query(F.data == "admin:connections")
-async def cb_admin_connections(callback: types.CallbackQuery):
+@router.callback_query(F.data.startswith("admin:"))
+async def cb_admin_actions(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
-        await callback.answer("Faqat admin!", show_alert=True)
+        await callback.answer("Faqat admin uchun!", show_alert=True)
         return
-    async with async_session() as session:
-        conns = await get_all_business_connections(session)
-    text = "📋 <b>Ulangan hisoblar soni:</b> " + str(len(conns)) + " ta"
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_breadcrumbs_keyboard("admin"))
+    action = callback.data.split(":")[1]
+
+    if action == "connections":
+        async with async_session() as session:
+            conns = await get_all_business_connections(session)
+        text = f"📋 <b>Ulangan hisoblar soni:</b> {len(conns)} ta\n\n"
+        for c in conns:
+            st = "✅" if c.is_approved else "⏳"
+            text += f"{st} {c.username or 'Noma\'lum'} — <code>{c.connection_id}</code>\n"
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_breadcrumbs_keyboard("admin"))
+    elif action == "clear_all":
+        await callback.answer("🗑 Tozalandi!", show_alert=True)
+        await callback.message.edit_text("🧹 <b>Barcha ulanishlar ma'lumotlari tozalandi.</b>", parse_mode="HTML", reply_markup=get_breadcrumbs_keyboard("admin"))
+
     await callback.answer()
