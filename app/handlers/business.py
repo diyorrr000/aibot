@@ -36,6 +36,21 @@ async def send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_mo
         except Exception as e:
             logger.error(f"Failed to send text fallback: {e}")
 
+async def keep_typing_active(bot: Bot, chat_id: int, conn_id: str, stop_event: asyncio.Event):
+    """Sends typing action periodically until response is ready."""
+    while not stop_event.is_set():
+        try:
+            await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING, business_connection_id=conn_id)
+        except Exception:
+            try:
+                await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            except Exception:
+                pass
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=3.5)
+        except asyncio.TimeoutError:
+            pass
+
 async def sync_all_business_connections(bot: Bot):
     try:
         async with async_session() as session:
@@ -181,7 +196,8 @@ async def handle_business_message(message: types.Message, bot: Bot):
         return
 
     now = time.time()
-    if chat_id in _last_ai_reply and now - _last_ai_reply[chat_id] < settings.rate_limit_seconds:
+    rate_limit = max(settings.rate_limit_seconds, 2.0)
+    if chat_id in _last_ai_reply and now - _last_ai_reply[chat_id] < rate_limit:
         return
 
     today = datetime.now().strftime("%Y-%m-%d")
@@ -191,10 +207,9 @@ async def handle_business_message(message: types.Message, bot: Bot):
         if first_msg_today:
             await set_greeting_date(session, chat_id, today)
 
-    try:
-        await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING, business_connection_id=conn_id)
-    except Exception:
-        pass
+    # Launch continuous typing status loop
+    typing_stop_event = asyncio.Event()
+    typing_task = asyncio.create_task(keep_typing_active(bot, chat_id, conn_id, typing_stop_event))
 
     contents = []
     log_content = text
@@ -222,26 +237,32 @@ async def handle_business_message(message: types.Message, bot: Bot):
     owner_handle = conn.username or conn.first_name or "akkount egasi"
     sys_prompt = conn.system_prompt or (
         f"Siz {owner_handle} ning shaxsiy yordamchisisiz. "
-        f"VAZIFANGIZ: Kelgan murojaatlarga o'zbek tilida muloqot qilgan holda javob berish.\n\n"
+        f"VAZIFANGIZ: Kelgan har qanday murojaat, savol yoki iboraga har tomonlama to'liq, keng va mazmunli javob berish.\n\n"
         f"QOIDALAR:\n"
         f"1. FAQAT va FAQAT O'zbek tilida yozing.\n"
-        f"2. Nomi, shakli yoki AI modeli haqida so'ralganda (masalan 'sen kimsan', 'qaysi modelsan', 'AI misan', 'Google misan'): HECH QACHON Google, Gemini, OpenAI, Claude, Anthropic, Sun'iy intellekt yoki AI model ekanligingizni AYTMANG! FAQAT 'Men {owner_handle} ning shaxsiy yordamchisiman' deb javob bering.\n"
-        f"3. Xabarlarda o'zingizni har safar qayta tanishtirmang ('Men shaxsiy yordamchiman' deb qayta yozmang)."
+        f"2. Nomi, shakli yoki AI modeli haqida so'ralganda (masalan 'sen kimsan', 'qaysi modelsan', 'AI misan'): HECH QACHON Google, Gemini, OpenAI, Claude, Anthropic, Sun'iy intellekt yoki AI model ekanligingizni AYTMANG! FAQAT 'Men {owner_handle} ning shaxsiy yordamchisiman' deb javob bering.\n"
+        f"3. Mijoz slengda, imlo xatolari bilan yoki qisqa yozsa ham uning niyatini to'g'ri tushunib, savoliga keng va atroflicha javob bering. Javob topolmay qolmang.\n"
+        f"4. Xabarlarda o'zingizni har safar qayta tanishtirmang ('Men shaxsiy yordamchiman' deb yozmang)."
     )
 
     if first_msg_today:
         sys_prompt += (
-            f"\n\n4. Bugun bu mijozning kun davomidagi BIRINCHI murojaati. "
+            f"\n\n5. Bugun bu mijozning kun davomidagi BIRINCHI murojaati. "
             f"Javobni bitta qisqa salom bilan boshlashingiz mumkin (masalan 'Assalomu alaykum! Qanday yordam bera olaman?'), so'ng murojaatiga to'liq javob bering."
         )
     else:
         sys_prompt += (
-            f"\n\n4. Bugun bu chatda ALLAQACHON salomlashilgan va muloqot davom etmoqda. "
-            f"HECH QANDAY salom berish yoki 'Assalomu alaykum' deyish MUMKIN EMAS! O'zingizni qayta tanishtirmang — FAQAT berilgan savolga to'g'ridan-to'g'ri javob bering."
+            f"\n\n5. Bugun bu chatda ALLAQACHON salomlashilgan va muloqot davom etmoqda. "
+            f"HECH QANDAY salom berish yoki 'Assalomu alaykum' deyish MUMKIN EMAS! O'zingizni qayta tanishtirmang — FAQAT berilgan savolga to'g'ridan-to'g'ri va to'liq javob bering."
         )
 
-    selected_model = pinned_model or conn.model or settings.default_model
-    reply_text = await ai_factory.generate_response(contents, sys_prompt, preferred_model=selected_model)
+    try:
+        selected_model = pinned_model or conn.model or settings.default_model
+        reply_text = await ai_factory.generate_response(contents, sys_prompt, preferred_model=selected_model)
+    finally:
+        typing_stop_event.set()
+        await typing_task
+
     _last_ai_reply[chat_id] = time.time()
 
     async with async_session() as session:

@@ -5,6 +5,7 @@ import aiohttp
 from aiogram import Bot, types
 from aiogram.enums import ChatAction
 from app.utils.logger import logger
+from app.services.ai.factory import ai_factory
 
 async def send_fb(bot: Bot, message: types.Message, conn_id: str, text: str, parse_mode="HTML"):
     try:
@@ -17,6 +18,25 @@ async def send_typing(bot: Bot, message: types.Message, conn_id: str):
         await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING, business_connection_id=conn_id)
     except Exception:
         pass
+
+async def cmd_ai_prompt(bot: Bot, message: types.Message, conn_id: str, args: str):
+    prompt = args.strip()
+    if not prompt and message.reply_to_message:
+        prompt = message.reply_to_message.text or message.reply_to_message.caption or ""
+    if not prompt:
+        await send_fb(bot, message, conn_id, "🤖 <b>AI ga savol yozing!</b>\n\nMisol: <code>.ai O'zbekiston poytaxti qayer?</code>")
+        return
+
+    await send_typing(bot, message, conn_id)
+    try:
+        reply = await ai_factory.generate_response(
+            contents=[prompt],
+            system_prompt="Siz foydali shaxsiy yordamchisisiz. Har doim o'zbek tilida to'liq va keng javob bering.",
+            preferred_model="gemini"
+        )
+        await send_fb(bot, message, conn_id, reply, parse_mode=None)
+    except Exception as e:
+        await send_fb(bot, message, conn_id, f"🚫 <b>AI xatosi:</b> <code>{e}</code>")
 
 async def cmd_weather(bot: Bot, message: types.Message, conn_id: str, args: str):
     city = args.strip() if args else "Qarshi"
@@ -151,6 +171,8 @@ async def cmd_telegraph(bot: Bot, message: types.Message, conn_id: str, args: st
         await send_fb(bot, message, conn_id, f"🚫 <b>Telegraph xatosi:</b> <code>{e}</code>")
 
 def register(pm):
+    for cmd in [".ai", ".grok", ".gpt", ".gemini"]:
+        pm.register_command(cmd, cmd_ai_prompt)
     pm.register_command(".weather", cmd_weather)
     pm.register_command(".tr", cmd_translate)
     pm.register_command(".currency", cmd_currency)

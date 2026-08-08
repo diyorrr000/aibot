@@ -24,10 +24,10 @@ router = Router()
 USERBOT_HELP_TEXT = """📋 <b>USERBOT BUYRUQLAR RO'YXATI</b>
 
 🤖 <b>AI Modellar:</b>
-  <code>.ai [savol]</code> — AI bilan muloqot
-  <code>.grok [savol]</code> — Grok 4.3 AI
-  <code>.gpt [savol]</code> — GPT 4o AI
-  <code>.model claude|grok|gpt|gemini</code> — Modelni pinlash
+  <code>.ai [savol]</code> — Gemini 2.5 Flash bilan muloqot
+  <code>.grok [savol]</code> — AI bilan muloqot
+  <code>.gpt [savol]</code> — AI bilan muloqot
+  <code>.gemini [savol]</code> — Gemini AI
 
 🌐 <b>Asboblar va Tarjima:</b>
   <code>.tr [til] [matn]</code> — Google Translate
@@ -44,6 +44,7 @@ USERBOT_HELP_TEXT = """📋 <b>USERBOT BUYRUQLAR RO'YXATI</b>
 📥 <b>Media va Saqlash:</b>
   <code>.yt [qidiruv]</code> — YouTube qidiruv
   <code>.ok</code> — Javobdagi mediani shaxsiy chatga saqlash
+  <code>.catbox</code>, <code>.envs</code>, <code>.0x0</code>, <code>.tmpfiles</code> — Fayl yuklash
 
 🎮 <b>O'yin va RolePlay:</b>
   <code>.me</code>, <code>.do</code>, <code>.try</code>, <code>.todo</code>, <code>.ro</code>
@@ -124,7 +125,7 @@ async def cb_navigation(callback: types.CallbackQuery):
     elif target == "plugins":
         await callback.message.edit_text(
             "🧩 <b>Mavjud Plaginlar:</b>\n\n"
-            ".weather, .tr, .yt, .currency, .shortlink, .gender, .tts, .telegraph, .love, .me, .do, .try, .todo, .ro",
+            ".ai, .weather, .tr, .yt, .currency, .shortlink, .gender, .tts, .telegraph, .love, .me, .do, .try, .todo, .ro, .catbox, .acc, .time",
             parse_mode="HTML",
             reply_markup=get_breadcrumbs_keyboard("home")
         )
@@ -190,8 +191,8 @@ async def cb_actions(callback: types.CallbackQuery):
         text, kb = await build_settings_view(user_id)
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
-# ── PRIVATE & GROUP CHAT DOT-COMMAND HANDLER ──
-@router.message(F.chat.type.in_({"private", "group", "supergroup"}))
+# ── ALL CHAT DOT-COMMAND HANDLER ──
+@router.message(F.text.startswith(".") | F.caption.startswith("."))
 async def handle_chat_commands(message: types.Message, bot: types.Bot):
     text = (message.text or message.caption or "").strip()
     if not (text.startswith(".") and len(text) > 1):
