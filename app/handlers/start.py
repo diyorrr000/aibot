@@ -8,6 +8,7 @@ from app.keyboards.inline import (
     get_settings_keyboard,
     get_admin_keyboard,
 )
+from app.keyboards.menu import get_main_reply_keyboard
 from app.database.connection import async_session
 from app.database.repository import (
     get_user_connection,
@@ -82,20 +83,23 @@ async def cmd_start(message: types.Message):
     welcome = (
         f"👋 <b>Xush kelibsiz, {message.from_user.full_name}!</b>\n\n"
         f"🤖 <b>Telegram Business AI & Userbot Platformasi</b>\n"
-        f"Tugmalar va dot-buyruqlar (.help, .co) orqali barcha bo'limlarni boshqarishingiz mumkin."
+        f"Quyidagi menyu tugmalari va dot-buyruqlar (.help, .co) orqali boshqarishingiz mumkin."
     )
-    await message.answer(welcome, parse_mode="HTML", reply_markup=get_main_menu_keyboard(is_admin))
+    await message.answer(welcome, parse_mode="HTML", reply_markup=get_main_reply_keyboard(is_admin))
 
 @router.message(Command("help"))
+@router.message(F.text == "📖 Yordam")
 async def cmd_help(message: types.Message):
     await message.answer(USERBOT_HELP_TEXT, parse_mode="HTML", reply_markup=get_breadcrumbs_keyboard("home"))
 
 @router.message(Command("settings"))
+@router.message(F.text.in_({"⚙️ Sozlamalar", "🎛 AI Sozlamalar"}))
 async def cmd_settings(message: types.Message):
     text, kb = await build_settings_view(message.from_user.id)
     await message.answer(text, parse_mode="HTML", reply_markup=kb)
 
 @router.message(Command("profile"))
+@router.message(F.text == "👤 Profilim")
 async def cmd_profile(message: types.Message):
     u = message.from_user
     text = (
@@ -105,6 +109,40 @@ async def cmd_profile(message: types.Message):
         f"🏷 <b>Username:</b> @{u.username if u.username else 'yo\'q'}\n"
     )
     await message.answer(text, parse_mode="HTML", reply_markup=get_breadcrumbs_keyboard("home"))
+
+@router.message(F.text == "🤖 Gemini 2.5 Flash AI")
+async def cmd_reply_ai_info(message: types.Message):
+    text = (
+        "🤖 <b>Gemini 2.5 Flash AI</b>\n\n"
+        "⚡️ Yagona rasmiy va cheksiz tezkor AI modeli aktivlashtirilgan.\n"
+        "Muloqot qilish uchun har qanday chatda <code>.ai [savol]</code> deb yozing yoki Telegram Business ulangan chatlarda to'g'ridan-to'g'ri javob beradi."
+    )
+    await message.answer(text, parse_mode="HTML", reply_markup=get_breadcrumbs_keyboard("home"))
+
+@router.message(F.text == "🧩 Plaginlar va Buyruqlar")
+async def cmd_reply_plugins(message: types.Message):
+    await plugin_manager.dispatch(".co", types.Bot.get_current(), message, "", "")
+
+@router.message(F.text == "💼 Business Ulanish")
+async def cmd_reply_business(message: types.Message):
+    text = (
+        "💼 <b>Telegram Business UlanishYo'riqnomasi:</b>\n\n"
+        "1. Telegram Sozlamalari ⚙️ ga kiring\n"
+        "2. <b>Telegram Business</b> bo'limini tanlang\n"
+        "3. <b>Chat Botlar (Chat Bots)</b> bo'limiga kiring\n"
+        "4. Ushbu botni ro'yxatdan tanlab saqlang!\n\n"
+        "✅ Shundan so'ng bot sizning hisobingizga kelgan xabarlarga avtomatik o'zbek tilida javob bera boshlaydi."
+    )
+    await message.answer(text, parse_mode="HTML", reply_markup=get_breadcrumbs_keyboard("home"))
+
+@router.message(Command("admin"))
+@router.message(F.text == "👑 Admin Panel")
+async def cmd_reply_admin(message: types.Message):
+    user_id = message.from_user.id
+    if user_id not in settings.admin_ids:
+        await message.answer("⚠️ Faqat admin uchun!", parse_mode=None)
+        return
+    await message.answer("👑 <b>ADMIN PANEL</b>", parse_mode="HTML", reply_markup=get_admin_keyboard())
 
 @router.callback_query(F.data.startswith("nav:"))
 async def cb_navigation(callback: types.CallbackQuery):
