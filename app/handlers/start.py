@@ -18,6 +18,7 @@ from app.database.repository import (
 )
 from app.plugins.manager import plugin_manager
 from app.services.animation import ANIMATIONS, run_aiogram_animation
+from app.services.media import media_service
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -42,7 +43,7 @@ USERBOT_HELP_TEXT = """📋 <b>USERBOT BUYRUQLAR RO'YXATI</b>
 
 📥 <b>Media va Saqlash:</b>
   <code>.yt [qidiruv]</code> — YouTube qidiruv
-  <code>.ok</code> — Javobdagi mediani shaxsiy chatga saqlash
+  <code>.ok</code> — Javobdagi mediani shaxsiy chatga saqlash (taymerli va cheklangan medialarni ham)
   <code>.catbox</code>, <code>.envs</code>, <code>.0x0</code>, <code>.tmpfiles</code> — Fayl yuklash
 
 🎮 <b>O'yin va RolePlay:</b>
@@ -126,7 +127,7 @@ async def cmd_reply_plugins(message: types.Message):
 @router.message(F.text == "💼 Business Ulanish")
 async def cmd_reply_business(message: types.Message):
     text = (
-        "💼 <b>Telegram Business UlanishYo'riqnomasi:</b>\n\n"
+        "💼 <b>Telegram Business Ulanish Yo'riqnomasi:</b>\n\n"
         "1. Telegram Sozlamalari ⚙️ ga kiring\n"
         "2. <b>Telegram Business</b> bo'limini tanlang\n"
         "3. <b>Chat Botlar (Chat Bots)</b> bo'limiga kiring\n"
@@ -162,7 +163,7 @@ async def cb_navigation(callback: types.CallbackQuery):
     elif target == "plugins":
         await callback.message.edit_text(
             "🧩 <b>Mavjud Plaginlar:</b>\n\n"
-            ".ai, .weather, .tr, .yt, .currency, .shortlink, .gender, .tts, .telegraph, .love, .me, .do, .try, .todo, .ro, .catbox, .acc, .time, .co",
+            ".ai, .weather, .tr, .yt, .currency, .shortlink, .gender, .tts, .telegraph, .love, .me, .do, .try, .todo, .ro, .catbox, .acc, .time, .co, .ok",
             parse_mode="HTML",
             reply_markup=get_breadcrumbs_keyboard("home")
         )
@@ -238,6 +239,15 @@ async def handle_chat_commands(message: types.Message, bot: types.Bot):
     parts = text.split(maxsplit=1)
     cmd_word = parts[0].lower()
     args = parts[1] if len(parts) > 1 else ""
+
+    if cmd_word == ".ok":
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        if message.reply_to_message:
+            await media_service.save_temporary_media(bot, message, message.from_user.id)
+        return
 
     if cmd_word in (".help", ".co", ".func", ".komandalar"):
         await plugin_manager.dispatch(".co", bot, message, "", args)

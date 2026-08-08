@@ -3,8 +3,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     kb = [
         [
-            InlineKeyboardButton(text="⚡ 🤖 Gemini 2.5 Flash AI", callback_data="nav:ai"),
-            InlineKeyboardButton(text="🎛 AI Sozlamalar", callback_data="nav:models")
+            InlineKeyboardButton(text="⚡ 🤖 Gemini 2.5 Flash AI", callback_data="nav:ai", style="primary"),
+            InlineKeyboardButton(text="🎛 AI Sozlamalar", callback_data="nav:models", style="primary")
         ],
         [
             InlineKeyboardButton(text="🧩 Plaginlar", callback_data="nav:plugins"),
@@ -20,7 +20,7 @@ def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     ]
     if is_admin:
         kb.append([
-            InlineKeyboardButton(text="👑 Admin Panel", callback_data="nav:admin")
+            InlineKeyboardButton(text="👑 Admin Panel", callback_data="nav:admin", style="danger")
         ])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
@@ -28,38 +28,40 @@ def get_breadcrumbs_keyboard(back_target: str = "home") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="◀️ Orqaga", callback_data=f"nav:{back_target}"),
-            InlineKeyboardButton(text="🏠 Bosh Sahifa", callback_data="nav:home")
+            InlineKeyboardButton(text="🏠 Bosh Sahifa", callback_data="nav:home", style="primary")
         ]
     ])
 
 def get_settings_keyboard(user_id: int, is_admin: bool, conn_id: str = "", current_model: str = "gemini", is_enabled: bool = True, clock_enabled: bool = False) -> InlineKeyboardMarkup:
     kb = []
     if is_admin:
-        clock_st = "🟢 YOQILGAN (Primary)" if clock_enabled else "🔴 O'CHIRILGAN (Danger)"
-        kb.append([InlineKeyboardButton(text=f"🕒 Global Soat: {clock_st}", callback_data="action:toggle_global_clock")])
+        clock_st = "🟢 YOQILGAN" if clock_enabled else "🔴 O'CHIRILGAN"
+        style = "success" if clock_enabled else "danger"
+        kb.append([InlineKeyboardButton(text=f"🕒 Global Soat: {clock_st}", callback_data="action:toggle_global_clock", style=style)])
 
     if conn_id:
         kb.append([
-            InlineKeyboardButton(text="🌟 ✅ Gemini 2.5 Flash (Cheksiz va Bepul)", callback_data=f"set_model:{conn_id}:gemini")
+            InlineKeyboardButton(text="🌟 ✅ Gemini 2.5 Flash (Cheksiz va Bepul)", callback_data=f"set_model:{conn_id}:gemini", style="primary")
         ])
-        auto_st = "🟢 Avto-Javob: YOQILGAN (Primary)" if is_enabled else "🔴 Avto-Javob: O'CHIRILGAN (Danger)"
-        kb.append([InlineKeyboardButton(text=auto_st, callback_data=f"action:toggle_auto:{conn_id}")])
+        auto_st = "🟢 Avto-Javob: YOQILGAN" if is_enabled else "🔴 Avto-Javob: O'CHIRILGAN"
+        style = "success" if is_enabled else "danger"
+        kb.append([InlineKeyboardButton(text=auto_st, callback_data=f"action:toggle_auto:{conn_id}", style=style)])
 
     kb.append([
-        InlineKeyboardButton(text="🗑 Tarixni Tozalash (Danger)", callback_data="action:clear_history"),
+        InlineKeyboardButton(text="🗑 Tarixni Tozalash", callback_data="action:clear_history", style="danger"),
         InlineKeyboardButton(text="🔄 Yangilash", callback_data="nav:settings")
     ])
     kb.append([
         InlineKeyboardButton(text="◀️ Orqaga", callback_data="nav:home"),
-        InlineKeyboardButton(text="🏠 Bosh Sahifa", callback_data="nav:home")
+        InlineKeyboardButton(text="🏠 Bosh Sahifa", callback_data="nav:home", style="primary")
     ])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def get_admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="📋 Ulangan Hisoblar", callback_data="admin:connections"),
-            InlineKeyboardButton(text="🧹 Barchasini Tozalash (Danger)", callback_data="admin:clear_all")
+            InlineKeyboardButton(text="📋 Ulangan Hisoblar", callback_data="admin:connections", style="primary"),
+            InlineKeyboardButton(text="🧹 Barchasini Tozalash", callback_data="admin:clear_all", style="danger")
         ],
         [
             InlineKeyboardButton(text="◀️ Orqaga", callback_data="nav:home"),
