@@ -21,6 +21,7 @@ from app.services.ai.factory import ai_factory
 from app.services.media import media_service
 from app.services.animation import run_aiogram_animation, ANIMATIONS
 from app.plugins.manager import plugin_manager
+from app.utils.helpers import clean_ai_markdown
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -28,13 +29,18 @@ router = Router()
 _last_ai_reply: dict = {}
 
 async def send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_mode="HTML"):
+    cleaned_text = clean_ai_markdown(text) if parse_mode == "HTML" else text
     try:
-        await bot.send_message(chat_id=chat_id, text=text, business_connection_id=conn_id, parse_mode=parse_mode)
-    except Exception:
+        await bot.send_message(chat_id=chat_id, text=cleaned_text, business_connection_id=conn_id, parse_mode=parse_mode)
+    except Exception as e:
+        logger.warning(f"send_text_fb with {parse_mode} failed ({e}), falling back to parse_mode=None")
         try:
-            await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
-        except Exception as e:
-            logger.error(f"Failed to send text fallback: {e}")
+            await bot.send_message(chat_id=chat_id, text=text, business_connection_id=conn_id)
+        except Exception:
+            try:
+                await bot.send_message(chat_id=chat_id, text=text)
+            except Exception as e2:
+                logger.error(f"Failed to send text fallback: {e2}")
 
 async def keep_typing_active(bot: Bot, chat_id: int, conn_id: str, stop_event: asyncio.Event):
     """Sends typing action periodically until response is ready."""
@@ -155,7 +161,10 @@ async def handle_business_message(message: types.Message, bot: Bot):
             try:
                 await bot.delete_business_messages(business_connection_id=conn_id, message_ids=[message.message_id])
             except Exception:
-                pass
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
             if message.reply_to_message:
                 await media_service.save_temporary_media(bot, message, owner_uid)
             return
@@ -272,7 +281,7 @@ async def handle_business_message(message: types.Message, bot: Bot):
     else:
         sys_prompt += (
             f"\n\n5. Bugun bu chatda ALLAQACHON salomlashilgan va muloqot davom etmoqda. "
-            f"HECH QANDAY salom berish yoki 'Assalomu alaykum' deyish MUMKIN EMAS! O'zingizni qayta tanishtirmang — FAQAT berilgan savolga to'g'ridan-to me javob bering."
+            f"HECH QANDAY salom berish yoki 'Assalomu alaykum' deyish MUMKIN EMAS! O'zingizni qayta tanishtirmang — FAQAT berilgan savolga to'g'ridan-to'g'ri javob bering."
         )
 
     try:

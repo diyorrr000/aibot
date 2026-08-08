@@ -1,4 +1,5 @@
 import re
+import html
 from datetime import datetime, timezone, timedelta
 
 UZB_TZ = timezone(timedelta(hours=5))
@@ -13,9 +14,10 @@ def to_bold_time(time_str: str) -> str:
     return "".join(BOLD_DIGITS.get(c, c) for c in time_str)
 
 def clean_ai_markdown(text: str) -> str:
-    """Convert AI markdown into Telegram Rich HTML Messages (headings, blockquotes, code blocks)."""
+    """Safely convert AI markdown into Telegram Rich HTML Messages with full entity escaping."""
     if not text:
         return ""
+
     if "\n---\n" in text:
         text = text.split("\n---\n")[0]
     if "**Translation:**" in text:
@@ -25,11 +27,15 @@ def clean_ai_markdown(text: str) -> str:
 
     code_blocks = []
     def save_code_block(match):
-        code = match.group(1).strip()
+        code = html.escape(match.group(1).strip())
         code_blocks.append(f'<pre><code>{code}</code></pre>')
         return f'___CODE_BLOCK_{len(code_blocks)-1}___'
 
     text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
+    text = html.escape(text)
+
+    text = re.sub(r'^#{1,3}\s+(.+)$', r'📌 <b>\1</b>', text, flags=re.MULTILINE)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
 
     lines = text.split('\n')
     new_lines = []
@@ -37,9 +43,9 @@ def clean_ai_markdown(text: str) -> str:
     quote_buf = []
 
     for line in lines:
-        if line.strip().startswith('>'):
+        if line.strip().startswith('&gt;'):
             in_quote = True
-            quote_buf.append(line.strip().lstrip('>').strip())
+            quote_buf.append(line.strip()[4:].strip())
         else:
             if in_quote:
                 q_text = ' '.join(quote_buf)
@@ -52,8 +58,6 @@ def clean_ai_markdown(text: str) -> str:
         new_lines.append(f'<blockquote>{q_text}</blockquote>')
 
     text = '\n'.join(new_lines)
-    text = re.sub(r'^#{1,3}\s+(.+)$', r'📌 <b>\1</b>', text, flags=re.MULTILINE)
-    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
 
     for idx, cb in enumerate(code_blocks):
