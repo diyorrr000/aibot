@@ -27,7 +27,7 @@ router = Router()
 
 _last_ai_reply: dict = {}
 
-async def send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_mode=None):
+async def send_text_fb(bot: Bot, chat_id: int, text: str, conn_id: str, parse_mode="HTML"):
     try:
         await bot.send_message(chat_id=chat_id, text=text, business_connection_id=conn_id, parse_mode=parse_mode)
     except Exception:
@@ -268,4 +268,4 @@ async def handle_business_message(message: types.Message, bot: Bot):
     async with async_session() as session:
         await add_chat_message(session, conn_id, chat_id, "assistant", reply_text)
 
-    await send_text_fb(bot, chat_id, reply_text, conn_id, parse_mode=None)
+    await send_text_fb(bot, chat_id, reply_text, conn_id, parse_mode="HTML")

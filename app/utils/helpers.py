@@ -13,7 +13,7 @@ def to_bold_time(time_str: str) -> str:
     return "".join(BOLD_DIGITS.get(c, c) for c in time_str)
 
 def clean_ai_markdown(text: str) -> str:
-    """Clean unwanted AI bold markers, translation headers and extra spaces."""
+    """Convert AI markdown into Telegram Rich HTML Messages (headings, blockquotes, code blocks)."""
     if not text:
         return ""
     if "\n---\n" in text:
@@ -23,12 +23,42 @@ def clean_ai_markdown(text: str) -> str:
     if "**Tarjima:**" in text:
         text = text.split("**Tarjima:**")[0]
 
-    # Remove bold/italic markdown
-    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text, flags=re.DOTALL)
-    text = re.sub(r'\*(.+?)\*', r'\1', text, flags=re.DOTALL)
-    text = re.sub(r'__(.+?)__', r'\1', text, flags=re.DOTALL)
-    text = re.sub(r'\*{1,2}', '', text)
+    code_blocks = []
+    def save_code_block(match):
+        code = match.group(1).strip()
+        code_blocks.append(f'<pre><code>{code}</code></pre>')
+        return f'___CODE_BLOCK_{len(code_blocks)-1}___'
+
+    text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
+
+    lines = text.split('\n')
+    new_lines = []
+    in_quote = False
+    quote_buf = []
+
+    for line in lines:
+        if line.strip().startswith('>'):
+            in_quote = True
+            quote_buf.append(line.strip().lstrip('>').strip())
+        else:
+            if in_quote:
+                q_text = ' '.join(quote_buf)
+                new_lines.append(f'<blockquote>{q_text}</blockquote>')
+                quote_buf = []
+                in_quote = False
+            new_lines.append(line)
+    if in_quote:
+        q_text = ' '.join(quote_buf)
+        new_lines.append(f'<blockquote>{q_text}</blockquote>')
+
+    text = '\n'.join(new_lines)
+    text = re.sub(r'^#{1,3}\s+(.+)$', r'📌 <b>\1</b>', text, flags=re.MULTILINE)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
+
+    for idx, cb in enumerate(code_blocks):
+        text = text.replace(f'___CODE_BLOCK_{idx}___', cb)
+
     return text.strip()
 
 def get_uzb_now() -> datetime:

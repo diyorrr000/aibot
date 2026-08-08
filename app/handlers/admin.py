@@ -18,6 +18,33 @@ async def cmd_admin(message: types.Message):
         return
     await message.answer("👑 <b>ADMIN PANEL</b>", parse_mode="HTML", reply_markup=get_admin_keyboard())
 
+@router.message(Command("setphoto"))
+async def cmd_set_photo(message: types.Message, bot: Bot):
+    if not is_admin(message.from_user.id):
+        return
+    reply = message.reply_to_message
+    if not reply or not reply.photo:
+        await message.answer("📸 <b>Bot profil rasmini yangilash uchun rasmga reply qilib /setphoto deb yozing!</b>", parse_mode="HTML")
+        return
+    try:
+        f_info = await bot.get_file(reply.photo[-1].file_id)
+        img_bytes = await bot.download_file(f_info.file_path)
+        input_file = types.BufferedInputFile(img_bytes.read(), filename="avatar.jpg")
+        await bot.set_my_profile_photo(photo=input_file)
+        await message.answer("✅ <b>Bot profil rasmi muvaffaqiyatli o'zgartirildi!</b>", parse_mode="HTML")
+    except Exception as e:
+        await message.answer(f"🚫 <b>Rasm o'zgartirishda xatolik:</b> <code>{e}</code>", parse_mode="HTML")
+
+@router.message(Command("delphoto"))
+async def cmd_del_photo(message: types.Message, bot: Bot):
+    if not is_admin(message.from_user.id):
+        return
+    try:
+        await bot.delete_my_profile_photo()
+        await message.answer("✅ <b>Bot profil rasmi o'chirildi!</b>", parse_mode="HTML")
+    except Exception as e:
+        await message.answer(f"🚫 <b>Xatolik:</b> <code>{e}</code>", parse_mode="HTML")
+
 @router.message(Command("connections"))
 async def cmd_connections(message: types.Message):
     if not is_admin(message.from_user.id):
