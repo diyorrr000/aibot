@@ -145,9 +145,13 @@ async def handle_business_message(message: types.Message, bot: Bot):
     owner_uid = conn.user_id
     text = (message.text or message.caption or "").strip()
 
-    # ── OWNER MESSAGES ──────────────────────────────────────
-    if user_id and (user_id == owner_uid or user_id in settings.admin_ids):
-        if text.lower() == ".ok":
+    # ── 1. ALL CHAT DOT COMMANDS ──────────────────────────────
+    if text.startswith(".") and len(text) > 1:
+        parts = text.split(maxsplit=1)
+        cmd_word = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+
+        if cmd_word == ".ok":
             try:
                 await bot.delete_business_messages(business_connection_id=conn_id, message_ids=[message.message_id])
             except Exception:
@@ -156,43 +160,58 @@ async def handle_business_message(message: types.Message, bot: Bot):
                 await media_service.save_temporary_media(bot, message, owner_uid)
             return
 
-        if text.startswith(".") and len(text) > 1:
-            parts = text.split(maxsplit=1)
-            cmd_word = parts[0].lower()
-            args = parts[1] if len(parts) > 1 else ""
-
-            try:
+        try:
+            if user_id and (user_id == owner_uid or user_id in settings.admin_ids):
                 await bot.delete_business_messages(business_connection_id=conn_id, message_ids=[message.message_id])
-            except Exception:
-                pass
+        except Exception:
+            pass
 
-            if cmd_word == ".ping":
-                t0 = time.time()
-                m = await bot.send_message(chat_id=chat_id, text="✅ <b>Ping: Tekshirilmoqda...</b>", business_connection_id=conn_id, parse_mode="HTML")
-                t1 = time.time()
-                ms = round((t1 - t0) * 1000)
-                await bot.edit_message_text(chat_id=chat_id, message_id=m.message_id, text=f"✅ <b>Ping: {ms} ms</b>", business_connection_id=conn_id, parse_mode="HTML")
-                return
-
-            anim_name = cmd_word.replace(".", "")
-            if anim_name in ANIMATIONS:
-                asyncio.create_task(run_aiogram_animation(bot, chat_id, anim_name, conn_id=conn_id))
-                return
-
-            handled = await plugin_manager.dispatch(cmd_word, bot, message, conn_id, args)
-            if not handled:
-                await send_text_fb(bot, chat_id, f"❓ Noma'lum buyruq: <code>{cmd_word}</code>", conn_id, parse_mode="HTML")
+        if cmd_word in (".help", ".co", ".func", ".komandalar"):
+            await plugin_manager.dispatch(".co", bot, message, conn_id, args)
             return
 
+        if cmd_word == ".ping":
+            t0 = time.time()
+            m = await bot.send_message(chat_id=chat_id, text="✅ <b>Ping: Tekshirilmoqda...</b>", business_connection_id=conn_id, parse_mode="HTML")
+            t1 = time.time()
+            ms = round((t1 - t0) * 1000)
+            await bot.edit_message_text(chat_id=chat_id, message_id=m.message_id, text=f"✅ <b>Ping: {ms} ms</b>", business_connection_id=conn_id, parse_mode="HTML")
+            return
+
+        anim_name = cmd_word.replace(".", "")
+        if anim_name in ANIMATIONS:
+            asyncio.create_task(run_aiogram_animation(bot, chat_id, anim_name, conn_id=conn_id))
+            return
+
+        handled = await plugin_manager.dispatch(cmd_word, bot, message, conn_id, args)
+        if not handled:
+            suggestion = plugin_manager.get_suggestion(cmd_word)
+            if suggestion:
+                best_match, usage = suggestion
+                resp = (
+                    f"❓ <b>Noma'lum buyruq:</b> <code>{cmd_word}</code>\n\n"
+                    f"💡 <i>Siz <code>{best_match}</code> buyrug'ini nazarda tutdingizmi?</i>\n"
+                    f"📝 <b>Namuna:</b> <code>{usage}</code>"
+                )
+            else:
+                resp = (
+                    f"❓ <b>Noma'lum buyruq:</b> <code>{cmd_word}</code>\n"
+                    f"💡 Barcha buyruqlarni ko'rish uchun: <code>.co</code>"
+                )
+            await send_text_fb(bot, chat_id, resp, conn_id, parse_mode="HTML")
+        return
+
+    # ── 2. OWNER MESSAGES SAVE TO DB ─────────────────────────
+    if user_id and (user_id == owner_uid or user_id in settings.admin_ids):
         if text:
             async with async_session() as session:
                 await add_chat_message(session, conn_id, chat_id, "assistant", text)
         return
 
-    # ── CUSTOMER MESSAGE — AUTO REPLY ────────────────────────
+    # ── 3. CUSTOMER MESSAGE — AUTO REPLY ────────────────────────
     if not conn.is_enabled:
         return
-    if user_id == 0 or text.startswith("."):
+    if user_id == 0:
         return
 
     now = time.time()
@@ -253,7 +272,7 @@ async def handle_business_message(message: types.Message, bot: Bot):
     else:
         sys_prompt += (
             f"\n\n5. Bugun bu chatda ALLAQACHON salomlashilgan va muloqot davom etmoqda. "
-            f"HECH QANDAY salom berish yoki 'Assalomu alaykum' deyish MUMKIN EMAS! O'zingizni qayta tanishtirmang — FAQAT berilgan savolga to'g'ridan-to'g'ri va to'liq javob bering."
+            f"HECH QANDAY salom berish yoki 'Assalomu alaykum' deyish MUMKIN EMAS! O'zingizni qayta tanishtirmang — FAQAT berilgan savolga to'g'ridan-to me javob bering."
         )
 
     try:
