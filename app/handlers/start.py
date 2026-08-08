@@ -25,14 +25,12 @@ USERBOT_HELP_TEXT = """📋 <b>USERBOT BUYRUQLAR RO'YXATI</b>
 
 🤖 <b>AI Modellar:</b>
   <code>.ai [savol]</code> — Gemini 2.5 Flash bilan muloqot
-  <code>.grok [savol]</code> — AI bilan muloqot
-  <code>.gpt [savol]</code> — AI bilan muloqot
   <code>.gemini [savol]</code> — Gemini AI
 
 🌐 <b>Asboblar va Tarjima:</b>
   <code>.tr [til] [matn]</code> — Google Translate
-  <code>.tts [matn]</code> — Matnni ovozga aylantirish
-  <code>.weather [shahar]</code> — Ob-havo
+  <code>.tts [matn]</code> — Matnni ovozga aylantirish (Speech)
+  <code>.weather [shahar]</code> — Ob-havo (Toshkent, Xorazm va b.)
   <code>.currency</code> / <code>.kurs</code> — Markaziy bank kursi
   <code>.shortlink [url]</code> — URL qisqartirish
   <code>.gender [ism]</code> — Jins taxmini
@@ -48,6 +46,7 @@ USERBOT_HELP_TEXT = """📋 <b>USERBOT BUYRUQLAR RO'YXATI</b>
 
 🎮 <b>O'yin va RolePlay:</b>
   <code>.me</code>, <code>.do</code>, <code>.try</code>, <code>.todo</code>, <code>.ro</code>
+  <code>.co</code> — Barcha modullar ro'yxati
 """
 
 async def build_settings_view(user_id: int):
@@ -55,14 +54,14 @@ async def build_settings_view(user_id: int):
     async with async_session() as session:
         conn = await get_user_connection(session, user_id)
         conn_id = conn.connection_id if conn else f"user_{user_id}"
-        curr_m = conn.model if conn else settings.default_model
+        curr_m = "gemini"
         is_en = conn.is_enabled if conn else True
         clock_on = conn.clock_on if conn else False
 
     text = (
         f"⚙️ <b>BOT BOSHQARUV PANELI</b>\n\n"
         f"👤 Foydalanuvchi ID: <code>{user_id}</code>\n"
-        f"🤖 AI Model: <code>{curr_m.upper()}</code>\n"
+        f"🤖 AI Model: <code>GEMINI 2.5 FLASH</code>\n"
         f"⚡ Avto-Javob: <code>{'YOQILGAN' if is_en else 'O\'CHIRILGAN'}</code>\n"
         f"🕒 Profil Soati: <code>{'YOQILGAN' if clock_on else 'O\'CHIRILGAN'}</code>\n"
     )
@@ -83,7 +82,7 @@ async def cmd_start(message: types.Message):
     welcome = (
         f"👋 <b>Xush kelibsiz, {message.from_user.full_name}!</b>\n\n"
         f"🤖 <b>Telegram Business AI & Userbot Platformasi</b>\n"
-        f"Tugmalar va dot-buyruqlar (.help) orqali barcha bo'limlarni boshqarishingiz mumkin."
+        f"Tugmalar va dot-buyruqlar (.help, .co) orqali barcha bo'limlarni boshqarishingiz mumkin."
     )
     await message.answer(welcome, parse_mode="HTML", reply_markup=get_main_menu_keyboard(is_admin))
 
@@ -125,7 +124,7 @@ async def cb_navigation(callback: types.CallbackQuery):
     elif target == "plugins":
         await callback.message.edit_text(
             "🧩 <b>Mavjud Plaginlar:</b>\n\n"
-            ".ai, .weather, .tr, .yt, .currency, .shortlink, .gender, .tts, .telegraph, .love, .me, .do, .try, .todo, .ro, .catbox, .acc, .time",
+            ".ai, .weather, .tr, .yt, .currency, .shortlink, .gender, .tts, .telegraph, .love, .me, .do, .try, .todo, .ro, .catbox, .acc, .time, .co",
             parse_mode="HTML",
             reply_markup=get_breadcrumbs_keyboard("home")
         )
@@ -154,8 +153,8 @@ async def cb_set_model(callback: types.CallbackQuery):
         async with async_session() as session:
             conn = await get_user_connection(session, callback.from_user.id)
             cid = conn.connection_id if conn else conn_id
-            await update_conn_settings(session, cid, model=target_model)
-        await callback.answer(f"✅ Model {target_model.upper()} ga o'zgartirildi!", show_alert=True)
+            await update_conn_settings(session, cid, model="gemini")
+        await callback.answer("✅ Model GEMINI 2.5 FLASH ga o'zgartirildi!", show_alert=True)
         text, kb = await build_settings_view(callback.from_user.id)
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
@@ -191,7 +190,7 @@ async def cb_actions(callback: types.CallbackQuery):
         text, kb = await build_settings_view(user_id)
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
-# ── ALL CHAT DOT-COMMAND HANDLER ──
+# ── ALL CHAT DOT-COMMAND HANDLER WITH FUZZY MATCHING ──
 @router.message(F.text.startswith(".") | F.caption.startswith("."))
 async def handle_chat_commands(message: types.Message, bot: types.Bot):
     text = (message.text or message.caption or "").strip()
@@ -202,8 +201,8 @@ async def handle_chat_commands(message: types.Message, bot: types.Bot):
     cmd_word = parts[0].lower()
     args = parts[1] if len(parts) > 1 else ""
 
-    if cmd_word == ".help":
-        await message.answer(USERBOT_HELP_TEXT, parse_mode="HTML")
+    if cmd_word in (".help", ".co", ".func", ".komandalar"):
+        await plugin_manager.dispatch(".co", bot, message, "", args)
         return
 
     if cmd_word == ".ping":
@@ -221,5 +220,18 @@ async def handle_chat_commands(message: types.Message, bot: types.Bot):
         return
 
     handled = await plugin_manager.dispatch(cmd_word, bot, message, "", args)
-    if not handled and message.chat.type == "private":
-        await message.answer(f"❓ Noma'lum buyruq: <code>{cmd_word}</code>\nBarcha buyruqlar: /help", parse_mode="HTML")
+    if not handled:
+        suggestion = plugin_manager.get_suggestion(cmd_word)
+        if suggestion:
+            best_match, usage = suggestion
+            resp = (
+                f"❓ <b>Noma'lum buyruq:</b> <code>{cmd_word}</code>\n\n"
+                f"💡 <i>Siz <code>{best_match}</code> buyrug'ini nazarda tutdingizmi?</i>\n"
+                f"📝 <b>Namuna:</b> <code>{usage}</code>"
+            )
+        else:
+            resp = (
+                f"❓ <b>Noma'lum buyruq:</b> <code>{cmd_word}</code>\n"
+                f"💡 Barcha buyruqlarni ko'rish uchun: <code>.co</code>"
+            )
+        await message.answer(resp, parse_mode="HTML")

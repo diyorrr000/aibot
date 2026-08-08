@@ -7,6 +7,29 @@ from aiogram.enums import ChatAction
 from app.utils.logger import logger
 from app.services.ai.factory import ai_factory
 
+REGION_MAP = {
+    "toshkent": "Tashkent",
+    "tashkent": "Tashkent",
+    "xorazm": "Urgench",
+    "urganch": "Urgench",
+    "urgench": "Urgench",
+    "samarqand": "Samarkand",
+    "buxoro": "Bukhara",
+    "andijon": "Andijan",
+    "fargona": "Fergana",
+    "namangan": "Namangan",
+    "qashqadaryo": "Karshi",
+    "qarshi": "Karshi",
+    "surxondaryo": "Termez",
+    "termez": "Termez",
+    "navoiy": "Navoi",
+    "jizzax": "Jizzakh",
+    "sirdaryo": "Guliston",
+    "guliston": "Guliston",
+    "qoraqalpogiston": "Nukus",
+    "nukus": "Nukus"
+}
+
 async def send_fb(bot: Bot, message: types.Message, conn_id: str, text: str, parse_mode="HTML"):
     try:
         await bot.send_message(chat_id=message.chat.id, text=text, business_connection_id=conn_id, parse_mode=parse_mode)
@@ -39,11 +62,13 @@ async def cmd_ai_prompt(bot: Bot, message: types.Message, conn_id: str, args: st
         await send_fb(bot, message, conn_id, f"🚫 <b>AI xatosi:</b> <code>{e}</code>")
 
 async def cmd_weather(bot: Bot, message: types.Message, conn_id: str, args: str):
-    city = args.strip() if args else "Qarshi"
+    raw_city = args.strip() if args else "Tashkent"
+    search_city = REGION_MAP.get(raw_city.lower(), raw_city)
+
     await send_typing(bot, message, conn_id)
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://wttr.in/{urllib.parse.quote(city)}?format=j1", timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.get(f"https://wttr.in/{urllib.parse.quote(search_city)}?format=j1", timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 data = await resp.json(content_type=None)
                 current = data["current_condition"][0]
                 temp = current["temp_C"]
@@ -51,8 +76,9 @@ async def cmd_weather(bot: Bot, message: types.Message, conn_id: str, args: str)
                 hum = current["humidity"]
                 wind = current["windspeedKmph"]
                 desc = current["weatherDesc"][0]["value"]
+                display_name = raw_city.capitalize() if raw_city else "Toshkent"
                 text = (
-                    f"⛅ <b>Ob-havo: {city}</b>\n\n"
+                    f"⛅ <b>Ob-havo: {display_name} ({search_city})</b>\n\n"
                     f"🌏 <b>Holati:</b> <code>{desc}</code>\n"
                     f"🔥 <b>Harorat:</b> <code>{temp}°C</code> (Tuyulishi: <code>{feels}°C</code>)\n"
                     f"🌈 <b>Shamol:</b> <code>{wind} km/s</code> | 💧 <b>Namlik:</b> <code>{hum}%</code>"
@@ -125,30 +151,66 @@ async def cmd_gender(bot: Bot, message: types.Message, conn_id: str, args: str):
     if not name:
         await send_fb(bot, message, conn_id, "🚫 <b>Ism kiriting!</b> Misol: <code>.gender Sardor</code>")
         return
+
     await send_typing(bot, message, conn_id)
-    gtext = "Erkak" if any(w in name.lower() for w in ["bek", "jon", "dor", "mir", "ali"]) else "Ayol"
-    emoji = "🖤" if gtext == "Erkak" else "❤️🔥"
-    await send_fb(bot, message, conn_id, f"👤 <b>Jins taxmini: {name}</b>\n\n{emoji} <b>Jinsi:</b> <code>{gtext}</code>")
+
+    gender_res = None
+    prob = 0.0
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://api.genderize.io?name={urllib.parse.quote(name)}", timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    g = data.get("gender")
+                    if g:
+                        gender_res = "Erkak" if g == "male" else "Ayol"
+                        prob = float(data.get("probability", 0.9)) * 100
+    except Exception:
+        pass
+
+    if not gender_res:
+        nl = name.lower()
+        male_suffixes = ["bek", "jon", "dor", "mir", "ali", "shox", "shoh", "boy", "zod", "xon", "ul", "din"]
+        if any(nl.endswith(s) for s in male_suffixes) or any(s in nl for s in ["bek", "jon", "dor", "mir", "ali"]):
+            gender_res = "Erkak"
+        else:
+            gender_res = "Ayol"
+        prob = 95.0
+
+    emoji = "🖤" if gender_res == "Erkak" else "❤️🔥"
+    await send_fb(bot, message, conn_id, f"👤 <b>Jins taxmini: {name}</b>\n\n{emoji} <b>Jinsi:</b> <code>{gender_res}</code> (Aniqlik: <code>{prob:.0f}%</code>)")
 
 async def cmd_tts(bot: Bot, message: types.Message, conn_id: str, args: str):
-    if not args:
-        await send_fb(bot, message, conn_id, "🚫 <b>Matn yozing!</b> Misol: <code>.tts Salom uz</code>")
+    text = args.strip()
+    if not text and message.reply_to_message:
+        text = message.reply_to_message.text or message.reply_to_message.caption or ""
+    if not text:
+        await send_fb(bot, message, conn_id, "🚫 <b>Matn yozing yoki reply qiling!</b> Misol: <code>.tts Salom qandaysiz</code>")
         return
-    raw = args.strip().split()
-    lang = "uz"
-    if raw[-1].lower() in ["uz", "ru", "en", "tr", "ar", "de", "fr"]:
+
+    raw = text.split()
+    lang = "tr"
+    if raw[-1].lower() in ["ru", "en", "tr", "ar", "de", "fr"]:
         lang = raw[-1].lower()
-        text = " ".join(raw[:-1])
+        speech_text = " ".join(raw[:-1])
     else:
-        text = " ".join(raw)
+        speech_text = " ".join(raw)
+
     await send_typing(bot, message, conn_id)
     try:
-        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={urllib.parse.quote(text)}&tl={lang}&client=tw-ob"
+        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={urllib.parse.quote(speech_text)}&tl={lang}&client=tw-ob"
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-                audio = await resp.read()
-                voice = types.BufferedInputFile(audio, filename=f"voice_{lang}.ogg")
-                await bot.send_voice(chat_id=message.chat.id, voice=voice, caption=f"🗣 <code>{text[:60]}</code>", business_connection_id=conn_id)
+                if resp.status == 200:
+                    audio = await resp.read()
+                    voice = types.BufferedInputFile(audio, filename="voice.ogg")
+                    try:
+                        await bot.send_voice(chat_id=message.chat.id, voice=voice, caption=f"🗣 <code>{speech_text[:60]}</code>", business_connection_id=conn_id)
+                    except Exception:
+                        await bot.send_voice(chat_id=message.chat.id, voice=voice, caption=f"🗣 <code>{speech_text[:60]}</code>")
+                    return
+                else:
+                    await send_fb(bot, message, conn_id, f"🚫 <b>TTS xatosi: HTTP {resp.status}</b>")
     except Exception as e:
         await send_fb(bot, message, conn_id, f"🚫 <b>TTS xatosi:</b> <code>{e}</code>")
 
@@ -171,7 +233,7 @@ async def cmd_telegraph(bot: Bot, message: types.Message, conn_id: str, args: st
         await send_fb(bot, message, conn_id, f"🚫 <b>Telegraph xatosi:</b> <code>{e}</code>")
 
 def register(pm):
-    for cmd in [".ai", ".grok", ".gpt", ".gemini"]:
+    for cmd in [".ai", ".gemini"]:
         pm.register_command(cmd, cmd_ai_prompt)
     pm.register_command(".weather", cmd_weather)
     pm.register_command(".tr", cmd_translate)

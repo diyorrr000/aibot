@@ -21,6 +21,39 @@ async def send_fb(bot: Bot, message: types.Message, conn_id: str, text: str, par
     except Exception:
         await bot.send_message(chat_id=message.chat.id, text=text, parse_mode=parse_mode)
 
+# All Modules Menu (.co, .func, .komandalar)
+async def cmd_all_modules(bot: Bot, message: types.Message, conn_id: str, args: str):
+    text = (
+        "🎛 <b>BARCHA USERBOT MODULLARI VA BUYRUQLARI</b>\n\n"
+        "🤖 <b>AI Modellar:</b>\n"
+        "  • <code>.ai [savol]</code> — Gemini 2.5 Flash bilan muloqot\n\n"
+        "🌐 <b>Asboblar va Tarjima:</b>\n"
+        "  • <code>.weather [shahar]</code> — Ob-havo (Toshkent, Xorazm va b.)\n"
+        "  • <code>.tr [til] [matn]</code> — Google Translate\n"
+        "  • <code>.tts [matn]</code> — Matnni ovozli xabarga aylantirish\n"
+        "  • <code>.currency</code> / <code>.kurs</code> — Markaziy Bank kurslari\n"
+        "  • <code>.shortlink [url]</code> — URL link qisqartirish\n"
+        "  • <code>.gender [ism]</code> — Jins taxmini\n"
+        "  • <code>.telegraph Sarlavha | Matn</code> — Maqola yaratish\n\n"
+        "📥 <b>Media va Yuklash:</b>\n"
+        "  • <code>.yt [qidiruv]</code> — YouTube qidiruv\n"
+        "  • <code>.ok</code> — Reply qilingan mediani saqlash\n"
+        "  • <code>.catbox</code> / <code>.envs</code> / <code>.0x0</code> / <code>.tmpfiles</code> — Fayl yuklash\n"
+        "  • <code>.rf</code> / <code>.read</code> — Fayl o'qish\n"
+        "  • <code>.q</code> / <code>.r</code> — Quote stiker yaratish\n"
+        "  • <code>.art</code> / <code>.nsfwart</code> — Anime suratlari\n\n"
+        "🎭 <b>Animatsiyalar:</b>\n"
+        "  • <code>.love</code>, <code>.snow</code>, <code>.xd</code>, <code>.police</code>, <code>.kill</code>, <code>.ari</code>, <code>.snake</code>, <code>.ghost</code> ...\n\n"
+        "🎮 <b>RolePlay va O'yinlar:</b>\n"
+        "  • <code>.me</code>, <code>.do</code>, <code>.try</code>, <code>.todo</code>, <code>.ro</code>\n\n"
+        "⚙️ <b>Sozlamalar va Avto:</b>\n"
+        "  • <code>.acc</code> — Akkunt info\n"
+        "  • <code>.time</code> / <code>.settime</code> — Taymer\n"
+        "  • <code>.auto</code> / <code>.stopauto</code> — Avto reklama\n"
+        "  • <code>.ping</code> — Bot tezligini tekshirish"
+    )
+    await send_fb(bot, message, conn_id, text)
+
 # Account Info (.acc)
 async def cmd_acc(bot: Bot, message: types.Message, conn_id: str, args: str):
     user = message.from_user
@@ -61,7 +94,7 @@ async def cmd_auto_ad(bot: Bot, message: types.Message, conn_id: str, args: str)
         await send_fb(bot, message, conn_id, "🚫 <b>Format:</b> <code>.auto @guruhlink 60 | Sotiladi iPhone 15!</code>")
         return
     part1, ad_msg = [x.strip() for x in args.split("|", 1)]
-    parts = part1.split()
+    parts = part1.strip().split()
     if len(parts) < 2:
         await send_fb(bot, message, conn_id, "🚫 <b>Format:</b> <code>.auto @guruhlink 60 | Xabar</code>")
         return
@@ -168,6 +201,8 @@ async def cmd_quote_sticker(bot: Bot, message: types.Message, conn_id: str, args
         await send_fb(bot, message, conn_id, f"🚫 <b>Quote xatosi:</b> <code>{e}</code>")
 
 def register(pm):
+    for cmd in [".co", ".func", ".komandalar"]:
+        pm.register_command(cmd, cmd_all_modules)
     pm.register_command(".acc", cmd_acc)
     pm.register_command(".art", lambda b, m, c, a: cmd_anime_arts(b, m, c, a, nsfw=False))
     pm.register_command(".nsfwart", lambda b, m, c, a: cmd_anime_arts(b, m, c, a, nsfw=True))
