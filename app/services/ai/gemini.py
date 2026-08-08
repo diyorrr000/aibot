@@ -46,26 +46,31 @@ class GeminiProvider(BaseAIProvider):
             )
         )
 
-        delay = 1.0
+        models_to_try = ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
         last_error = None
-        for attempt in range(retries):
-            try:
-                response = await asyncio.wait_for(
-                    client.aio.models.generate_content(
-                        model="gemini-2.5-flash-lite",
-                        contents=contents,
-                        config=config
-                    ),
-                    timeout=timeout
-                )
-                text = response.text
-                if not text:
-                    raise ValueError("Empty response from Gemini API.")
-                return clean_ai_markdown(text)
-            except Exception as e:
-                last_error = e
-                logger.warning(f"Gemini API attempt {attempt+1}/{retries} failed: {e}")
-                await asyncio.sleep(delay)
-                delay *= 1.5
 
-        raise Exception(f"Gemini API error: {last_error}")
+        for model in models_to_try:
+            delay = 1.0
+            for attempt in range(retries):
+                try:
+                    logger.info(f"Gemini API calling model '{model}' (attempt {attempt+1}/{retries})...")
+                    response = await asyncio.wait_for(
+                        client.aio.models.generate_content(
+                            model=model,
+                            contents=contents,
+                            config=config
+                        ),
+                        timeout=timeout
+                    )
+                    text = response.text
+                    if not text:
+                        raise ValueError(f"Empty response from Gemini API model {model}.")
+                    return clean_ai_markdown(text)
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"Gemini API model '{model}' attempt {attempt+1}/{retries} failed: {e}")
+                    await asyncio.sleep(delay)
+                    delay *= 1.5
+
+        raise Exception(f"Gemini API error across all models: {last_error}")
+
